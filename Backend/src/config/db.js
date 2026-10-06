@@ -1,6 +1,5 @@
 const mysql = require('mysql2/promise');
 
-// .env에 작성한 정보로 MySQL 연결 풀을 만듭니다.
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT) || 3306,
@@ -12,7 +11,6 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
-// 서버를 시작할 때 데이터베이스 연결 상태를 확인합니다.
 async function checkDatabaseConnection() {
   const connection = await pool.getConnection();
 
