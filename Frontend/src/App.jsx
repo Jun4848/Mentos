@@ -1,11 +1,10 @@
-
-
 import './App.css'
+import LoginForm from './LoginPage'
 
 function App() {
   return (
     <>
-      <h1>123</h1>
+      <LoginForm/>
     </>
   )
 }
