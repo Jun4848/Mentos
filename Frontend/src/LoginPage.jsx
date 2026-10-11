@@ -1,8 +1,9 @@
 import schoolLogo from "./경북소프트웨어마이스터고등학교 로고.png";
-
+import { useNavigate } from "react-router-dom";
 
 
 const LoginForm = () => {
+  const nav = useNavigate()
   return (
     <div className="h-screen flex justify-center items-center flex-col">
       <div className="flex justify-center items-center flex-col w-84 h-120 gap-8 p-10 rounded-2xl">
@@ -29,6 +30,12 @@ const LoginForm = () => {
           로그인
         </button>
       </div>
+      <button onClick={()=>{nav("/main")}}>
+          메인페이지
+        </button>
+        <button onClick={()=>{nav("/admin")}}>
+          어드민페이지
+        </button>
     </div>
   );
 };
