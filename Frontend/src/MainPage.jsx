@@ -1,11 +1,18 @@
 import { useNavigate } from "react-router-dom";
 
-const MainPage = () => {
+const MainPage = ({day}) => {
     const nav = useNavigate()
     return(
         <div>
-            <button onClick={()=>{nav("/")}}>로그인페이지</button>
-            <h1>메인페이지입니다.</h1>
+            <div>
+                <div>
+                    <h1>학생 학번 + 이름</h1>
+                </div>
+                <div>
+                    <h1>{day}시간</h1>
+                    <button>출석체크</button>
+                </div>
+            </div>
         </div>
     )
 };
