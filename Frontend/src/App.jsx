@@ -6,14 +6,15 @@ import { Routes,Route } from "react-router-dom";
 import { useState } from 'react';
 
 function App() {
-  const [day,setDay] = useState("점심")
-
+  const [day,setDay] = useState("점심");
+  const [MainId,setMainId] = useState("");
+  
 
   return (
     <>
       <Routes>
         <Route path='/' element={<LoginPage/>}></Route>
-        <Route path='/main' element={<MainPage day={day}/>}></Route>
+        <Route path='/main' element={<MainPage day={day} Id={MainId}/>}></Route>
         <Route path='/admin' element={<AdminPage/>}></Route>
       </Routes>
     </>
