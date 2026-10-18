@@ -19,7 +19,7 @@ const LoginPage = () => {
 
         <LoginInput type="text" placeholder="아이디" onChange={(e)=>{setId(e.target.value)}}/> {/* 아이디 입력창 */}
         <LoginInput type="text" placeholder="비밀번호" onChange={(e)=>{setPassword(e.target.value)}}/> {/* 비밀번호 입력창 */}
-          
+
         <button // 제출버튼
           type="submit"
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold w-full h-11 rounded-[20px] cursor-pointer transition"
@@ -28,12 +28,14 @@ const LoginPage = () => {
           로그인
         </button>
       </div>
-      <button onClick={()=>{nav("/main")}}>
-          메인페이지
+      <div> {/*페이지간 이동용 버튼 -> 곧 없앨거임*/}
+        <button onClick={()=>{nav("/main")}}>
+            메인페이지
         </button>
         <button onClick={()=>{nav("/admin")}}>
           어드민페이지
         </button>
+      </div>
     </div>
   );
 };

@@ -1,22 +1,19 @@
 import { useNavigate } from "react-router-dom";
-import schoolLogo from "./schoollogo.png";
+import MainPageNav from "./MainPageNav";
+import { useState } from "react";
 
 const MainPage = ({day}) => {
     const nav = useNavigate()
+    const [Status,setStatus] = useState("start") // start = 제출해야됨 | end = 제출기간 마감
     return(
         <div>
             <div>
-                <div className="w-screen h-20 bg-emerald-600 flex flex-row justify-center items-center">
-                    <img
-                              src={schoolLogo}
-                              alt="schoollogo"
-                              className="w-15 h-15"
-                            />
-                    <h1>학생 학번 + 이름</h1>
-                </div>
-                <div>
+                <MainPageNav/>
+                <div className="flex flex-col justify-center items-center w-screen h-[70vh] gap-5">
                     <h1>{day}시간</h1>
-                    <button>출석체크</button>
+                    <button
+                        className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer w-35 h-15 rounded-2xl text-white font-bold"
+                    >출석체크</button>
                 </div>
             </div>
         </div>
