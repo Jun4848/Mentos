@@ -1,8 +1,9 @@
 import schoolLogo from "./schoollogo.png";
-import { useNavigate } from "react-router-dom";
 import LoginInput from "./LoginInput";
-import { useState } from "react";
 import CheckEmpty from "./CheckEmpty";
+import { useNavigate } from "react-router-dom";
+
+import { useState } from "react";
 const LoginPage = () => {
   const [Id,setId] = useState("")
   const [Password,setPassword] = useState("")

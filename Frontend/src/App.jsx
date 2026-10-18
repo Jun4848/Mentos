@@ -1,9 +1,10 @@
 import './App.css'
-import LoginPage from './LoginPage'
-import MainPage from './MainPage'
+
+import MainPage from './Main/MainPage'
 import AdminPage from './AdminPage';
 import { Routes,Route } from "react-router-dom";
 import { useState } from 'react';
+import LoginPage from './Login/LoginPage';
 
 function App() {
   const [day,setDay] = useState("점심");
