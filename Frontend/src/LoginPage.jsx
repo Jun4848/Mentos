@@ -1,8 +1,11 @@
 import schoolLogo from "./schoollogo.png";
 import { useNavigate } from "react-router-dom";
+import LoginInput from "./LoginInput";
+import { useState } from "react";
 
-
-const LoginForm = () => {
+const LoginPage = () => {
+  const [Id,setId] = useState("")
+  const [Password,setPassword] = useState("")
   const nav = useNavigate()
   return (
     <div className="h-screen flex justify-center items-center flex-col">
@@ -13,19 +16,12 @@ const LoginForm = () => {
           className="w-24 h-24"
         />
         <h1 className="font-medium text-2xl">기숙사 출석체크</h1>
-        <input // 아이디 입력
-          type="text"
-          placeholder="아이디"
-          className="border-b border-b-gray-400 w-full h-10 placeholder:text-[10px] focus:outline-none"
-        />
-        <input // 비밀번호 입력
-          type="password"
-          placeholder="비밀번호"
-          className="border-b border-b-gray-400 w-full h-10 placeholder:text-[10px] focus:outline-none"
-        />
+        <LoginInput type="text" placeholder="아이디" onChange={(e)=>{setId(e.target.value)}}/>
+        <LoginInput type="text" placeholder="비밀번호" onChange={(e)=>{setPassword(e.target.value)}}/>
         <button // 제출버튼
           type="submit"
-          className="bg-emerald-600 text-white font-bold w-full h-11 rounded-[20px] hover:bg-emerald-700 cursor-pointer transition"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold w-full h-11 rounded-[20px] cursor-pointer transition"
+          onClick={()=>{console.log(Id, Password)}}
         >
           로그인
         </button>
@@ -40,4 +36,4 @@ const LoginForm = () => {
   );
 };
 
-export default LoginForm;
+export default LoginPage;
