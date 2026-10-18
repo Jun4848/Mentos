@@ -171,3 +171,4 @@ Mentos/
 - `src/controllers/`: API 응답을 처리합니다.
 - `src/config/db.js`: `mysql2`로 MySQL 연결을 설정합니다.
 - `src/models/`: 나중에 데이터 처리 코드를 추가할 폴더입니다.
+수정한거
