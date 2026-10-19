@@ -40,9 +40,10 @@ const LoginPage = ({setMainId,setMainName}) => {
 
   return (
     <div className="min-h-screen flex justify-center items-center flex-col py-10">
-      <form onSubmit={handleSubmit} className="flex flex-col justify-center items-center w-84 gap-6 p-10 rounded-2xl">
         <img src={schoolLogo} alt="schoollogo" className="w-24 h-24" />
         <h1 className="font-medium text-2xl">기숙사 출석체크</h1>
+      <form onSubmit={handleSubmit} className="flex flex-col justify-center items-center w-84 gap-6 p-10 rounded-2xl">
+        
         <LoginInput type="text" placeholder="아이디" value={Id} maxLength={50} autoComplete="username" required disabled={busy} onChange={(e) => setId(e.target.value)} />
         <LoginInput type="password" placeholder="비밀번호" value={Password} maxLength={128} autoComplete="current-password" required disabled={busy} onChange={(e) => setPassword(e.target.value)} />
         {message && <p role="status" className="text-sm text-center">{message}</p>}
