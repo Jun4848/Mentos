@@ -4,6 +4,7 @@ const { login } = require('../controllers/authController');
 
 const router = express.Router();
 
+// GET /
 router.get('/', getHome);
 router.post('/api/auth/login', login);
 
