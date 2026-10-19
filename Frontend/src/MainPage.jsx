@@ -1,7 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
-
 import MainPageNav from "./MainPageNav";
+import { useState } from "react";
 
 const MainPage = ({day, Id, Name}) => {
     const nav = useNavigate()
