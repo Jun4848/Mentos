@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 const app = require('./app');
-const { checkDatabaseConnection } = require('./config/db');
+const { checkDatabaseConnection, createUsersTable, pool } = require('./config/db');
 
 const PORT = Number(process.env.PORT) || 3000;
 const DB_RETRY_ATTEMPTS = 5;
@@ -30,10 +30,14 @@ async function connectToDatabaseWithRetry() {
 async function startServer() {
   try {
     await connectToDatabaseWithRetry();
+    await createUsersTable();
     console.log('MySQL connection successful');
   } catch (error) {
     const errorMessage = error.message || error.code || '알 수 없는 오류';
     console.error('MySQL connection failed:', errorMessage);
+    await pool.end();
+    process.exitCode = 1;
+    return;
   }
 
   app.listen(PORT, () => {
