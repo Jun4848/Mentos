@@ -19,7 +19,7 @@ const LoginPage = ({setMainId,setMainName}) => {
       const response = await fetch("http://localhost:3000/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({id: Id, password: Password}),
+        body: JSON.stringify({ id: Id, password: Password }),
       })
       const result = await response.json()
       if (!response.ok) {
@@ -45,7 +45,7 @@ const LoginPage = ({setMainId,setMainName}) => {
         <h1 className="font-medium text-2xl">기숙사 출석체크</h1>
 
         <LoginInput type="text" placeholder="아이디" onChange={(e)=>{setId(e.target.value)}}/> {/* 아이디 입력창 */}
-        <LoginInput type="text" placeholder="비밀번호" onChange={(e)=>{setPassword(e.target.value)}}/> {/* 비밀번호 입력창 */}
+        <LoginInput type="password" placeholder="비밀번호" onChange={(e)=>{setPassword(e.target.value)}}/> {/* 비밀번호 입력창 */}
 
         <button // 제출버튼
           type="submit"
