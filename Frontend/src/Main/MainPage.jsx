@@ -3,13 +3,13 @@ import { useState } from "react";
 
 import MainPageNav from "./MainPageNav";
 
-const MainPage = ({day}) => {
+const MainPage = ({day, Id, Name}) => {
     const nav = useNavigate()
     const [Status,setStatus] = useState("start") // start = 제출해야됨 | end = 제출기간 마감
     return(
         <div>
             <div>
-                <MainPageNav/>
+                <MainPageNav Id={Id} Name={Name}/>
                 <div className="flex flex-col justify-center items-center w-screen h-[70vh] gap-5">
                     <h1>{day}시간</h1>
                     <button
