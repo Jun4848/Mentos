@@ -14,7 +14,7 @@ const pool = mysql.createPool({
 async function checkDatabaseConnection() {
   const connection = await pool.getConnection();
 
-  try {›
+  try {
     await connection.query('SELECT 1');
   } finally {
     connection.release();
