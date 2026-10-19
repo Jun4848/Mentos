@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import MainPageNav from "./MainPageNav";
 import { useState } from "react";
 
-const MainPage = ({day, Id, Name}) => {
+const MainPage = ({day}) => {
     const nav = useNavigate()
     const [Status,setStatus] = useState("start") // start = 제출해야됨 | end = 제출기간 마감
     return(
