@@ -1,7 +1,8 @@
 require('dotenv').config();
 
 const app = require('./app');
-const { checkDatabaseConnection, createUsersTable, pool } = require('./config/db');
+const { checkDatabaseConnection, pool } = require('./config/db');
+const { migrate } = require('./database/migrate');
 
 const PORT = Number(process.env.PORT) || 3000;
 const DB_RETRY_ATTEMPTS = 5;
@@ -31,10 +32,9 @@ async function connectToDatabaseWithRetry() {
 async function startServer() {
   try {
     await connectToDatabaseWithRetry();
-    await createUsersTable();
+    await migrate();
     console.log('MySQL connection successful');
   } catch (error) {
-    // 개발환경에서는 DB가 꺼져 있어도 기본 API를 확인할 수 있도록 서버를 계속 실행합니다.
     const errorMessage = error.message || error.code || '알 수 없는 오류';
     console.error('MySQL connection failed:', errorMessage);
     await pool.end();
@@ -42,9 +42,14 @@ async function startServer() {
     return;
   }
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
   });
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.once(signal, () => {
+      server.close(() => pool.end().then(() => { process.exitCode = 0; }));
+    });
+  }
 }
 
 startServer();
