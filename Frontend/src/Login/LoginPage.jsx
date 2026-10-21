@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import LoginInput from "./LoginInput";
 import { useState } from "react";
 
-import CheckEmpty from "./CheckEmpty";
+import CheckLoginEmpty from "./CheckLoginEmpty";
 const LoginPage = ({setMainId, setMainName, setMainRole}) => {
   const [Id,setId] = useState("")
   const [Password,setPassword] = useState("")
@@ -14,7 +14,7 @@ const LoginPage = ({setMainId, setMainName, setMainRole}) => {
 
   async function Login(e) {
     e.preventDefault();
-    if (Loading || !CheckEmpty({Id,Password})) return;
+    if (Loading || !CheckLoginEmpty({Id,Password})) return;
 
     setLoading(true);
     try {
