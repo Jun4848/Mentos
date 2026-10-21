@@ -12,5 +12,5 @@ COPY . .
 
 EXPOSE 3000
 
-# 컨테이너를 실행할 때 개발 서버를 시작합니다.
+# Node.js 내장 watch 모드로 개발 서버를 시작합니다.
 CMD ["npm", "run", "dev"]

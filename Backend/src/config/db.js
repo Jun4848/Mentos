@@ -10,6 +10,12 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  timezone: 'Z',
+  dateStrings: ['DATE'],
+});
+
+pool.on('connection', (connection) => {
+  connection.query("SET time_zone = '+00:00'");
 });
 
 // 서버를 시작할 때 데이터베이스 연결 상태를 확인합니다.
@@ -23,20 +29,7 @@ async function checkDatabaseConnection() {
   }
 }
 
-async function createUsersTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id VARCHAR(50) PRIMARY KEY,
-      name VARCHAR(100) NOT NULL DEFAULT '',
-      room_number VARCHAR(10) NOT NULL DEFAULT '',
-      password_hash VARCHAR(255) NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-  `);
-}
-
 module.exports = {
   pool,
   checkDatabaseConnection,
-  createUsersTable,
 };
