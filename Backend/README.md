@@ -15,7 +15,7 @@ cd Backend
 cp .env.example .env
 ```
 
-새로 실행하는 팀원은 `.env`의 `DB_PASSWORD=your_password`를 자신의 개발용 DB 비밀번호로 바꿉니다. 기존 `.env`와 DB 볼륨이 있다면 덮어쓰지 말고 기존 비밀번호를 사용합니다.
+새로 실행하는 팀원은 `.env`의 `DB_PASSWORD=your_password`를 자신의 개발용 DB 비밀번호로 바꾸고 `SESSION_SECRET`에 32자 이상의 무작위 값을 설정합니다. 예를 들어 `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`로 값을 생성할 수 있습니다. 기존 `.env`와 DB 볼륨이 있다면 덮어쓰지 말고 기존 비밀번호를 사용합니다.
 
 ```bash
 docker compose up -d --build
@@ -72,7 +72,7 @@ curl -b cookies.txt -X POST http://localhost:3000/api/attendance \
 curl -b cookies.txt -X POST http://localhost:3000/api/auth/logout
 ```
 
-로그인은 `HttpOnly` 쿠키와 `accessToken`을 발급합니다. 쿠키 대신 `Authorization: Bearer <accessToken>` 헤더도 사용할 수 있습니다. 기본 만료 시간은 24시간이며, 서버를 재시작해도 DB에 저장된 세션은 유지됩니다. 로그아웃·만료된 세션은 재사용할 수 없습니다.
+로그인은 `express-session`의 `HttpOnly` 세션 쿠키를 발급합니다. 이후 요청에는 쿠키를 전달해야 합니다. 기본 만료 시간은 24시간이며, 서버를 재시작해도 MySQL에 저장된 세션은 유지됩니다. 로그아웃·만료된 세션은 재사용할 수 없습니다. 기존 Bearer 토큰은 새 세션으로 이전되지 않으므로 배포 후 다시 로그인해야 합니다.
 
 자세한 요청/응답과 권한은 [API 문서](docs/API.md), 테이블·관계와 변경 이유는 [ERD 문서](docs/ERD.md)를 참고하세요.
 
@@ -113,7 +113,8 @@ Docker 공식 문서: [Compose 네트워크](https://docs.docker.com/compose/how
 ## 기존 DB 이전
 
 - `users` → `user_accounts`: 테이블을 rename하여 기존 계정과 해시를 그대로 유지합니다.
-- `attendance_records`, `leave_applications`, `login_sessions`: 새로 생성합니다.
+- `attendance_records`, `leave_applications`, `login_sessions`: 기존 마이그레이션에서 생성합니다. `login_sessions`의 기존 토큰은 사용하지 않고 데이터는 보존합니다.
+- `express_sessions`: 002 마이그레이션에서 생성하는 `express-session` 저장 테이블입니다.
 - 원본 `home_stay`, `leave_requests`는 각각 `legacy_home_stay`, `legacy_leave_requests`로 보관합니다. 원본 행과 외래 키를 유지합니다.
 - 과거 `choice` 값이 잔류/귀가 선택인지 불분명하므로 원본 신청을 새 신청으로 임의 변환하지 않습니다. 보관된 과거 신청은 새 API 목록에 합쳐지지 않습니다. 데이터가 있는 다른 팀원 DB에서는 의미를 확인한 뒤 별도 이전할 수 있습니다.
 - 이번 로컬 DB 적용 전 계정은 3개, 기존 신청은 각 0개였습니다. 적용 전 백업은 `backups/before-auth-migration-20261020.sql`에 있으며 Git/Docker 빌드 대상에서 제외했습니다.
@@ -137,6 +138,7 @@ docker compose exec backend npm run db:migrate
 | `DB_NAME` | DB 이름 / `dormitory` |
 | `FRONTEND_ORIGINS` | 허용할 프론트 주소 목록 |
 | `SESSION_HOURS` | 로그인 유지 시간 / `24` (1~720) |
+| `SESSION_SECRET` | 32자 이상의 임의 비밀값, 필수. 모든 백엔드 인스턴스에서 같은 값을 사용 |
 | `COOKIE_SECURE` | HTTPS 쿠키 사용 / 로컬 `false`, HTTPS `true` |
 
 서버와 MySQL 시각은 UTC를 사용하고, 학생 출석 날짜는 `Asia/Seoul` 기준으로 계산합니다.

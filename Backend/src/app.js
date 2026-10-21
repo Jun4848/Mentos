@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const routes = require('./routes');
 const { HttpError } = require('./lib/http');
+const { createSessionMiddleware } = require('./middleware/session');
 const app = express();
 app.disable('x-powered-by');
 
@@ -20,6 +21,7 @@ app.use((req, res, next) => {
 });
 app.use(cors({ origin: (origin, callback) => callback(null, origin || false), credentials: true }));
 app.use(express.json({ limit: '16kb' }));
+app.use(createSessionMiddleware());
 app.use('/', routes);
 app.use((req, res) => res.status(404).json({ message: 'API를 찾을 수 없습니다.' }));
 app.use((error, req, res, next) => {

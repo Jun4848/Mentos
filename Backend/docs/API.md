@@ -24,13 +24,11 @@
   "id": "student01",
   "name": "홍길동",
   "roomNumber": "301",
-  "role": "STUDENT",
-  "accessToken": "64자리 임의 토큰",
-  "expiresAt": "2026-10-21T00:00:00.000Z"
+  "role": "STUDENT"
 }
 ```
 
-`Set-Cookie`의 `mentos_session` 또는 `Authorization: Bearer <accessToken>`을 이후 요청에 전달합니다. Bearer 헤더가 있으면 쿠키보다 우선합니다. `/me`는 토큰·만료 시간을 제외한 계정 정보를 반환합니다. 비밀번호/해시는 응답에 포함하지 않습니다. 만료·로그아웃 후에는 401입니다.
+`Set-Cookie`의 `mentos_session`을 이후 요청에 전달합니다. 브라우저의 교차 출처 요청은 `credentials: 'include'`를 사용합니다. Bearer 인증은 지원하지 않습니다. `/me`는 현재 계정 정보를 반환합니다. 비밀번호/해시는 응답에 포함하지 않습니다. 만료·로그아웃 후에는 401입니다.
 
 ## 출결
 
