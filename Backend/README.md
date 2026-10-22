@@ -6,6 +6,26 @@ Express + MySQL 8.0으로 기숙사 계정 로그인, 출결, 외출·귀가 신
 
 프론트는 `Frontend` 폴더에서 `npm run dev`로 실행합니다. `vite.config.js`가 `/api` 요청을 `http://127.0.0.1:3000`으로 전달합니다. 실제 배포에서도 웹 서버가 `/api`를 백엔드로 전달하도록 설정합니다.
 
+## 로그인 코드 구조
+
+요청은 `AuthRoutes → AuthController → AuthService → Repository` 순서로 처리합니다.
+
+| 파일 | 담당 역할 |
+| --- | --- |
+| `src/routes/authRoutes.js` | `AuthRoutes`: 로그인·내 정보·로그아웃의 Express Router 구성 |
+| `src/controllers/authController.js` | `AuthController`: HTTP 요청 값 전달, 쿠키 및 응답 처리 |
+| `src/services/authService.js` | `AuthService`: 입력·비밀번호 검증, 세션 발급·확인·폐기 |
+| `src/repositories/userRepository.js` | `UserRepository`: MySQL 계정 조회 |
+| `src/repositories/sessionRepository.js` | `SessionRepository`: MySQL 세션 저장·조회·삭제 |
+| `src/middleware/auth.js` | 인증 결과를 요청에 연결하고 역할 확인 |
+| `src/lib/session.js` | 세션 해시와 쿠키 처리에 사용하는 공통 함수 |
+
+Controller와 인증 미들웨어는 같은 `authService` 인스턴스를 사용합니다. 라우터의 `.bind(controller)`는 Express가 메서드를 호출할 때도 해당 Controller의 `this`가 유지되게 합니다.
+
+이 구조 정리에서는 프론트, DB 스키마, `salt:hash` 형식의 scrypt 검증 코드를 변경하지 않았습니다. 현재 저장소의 계정 테이블은 `user_accounts`이며 이름과 컬럼을 그대로 사용합니다. 기존 `users` 이전 로직에도 변경을 추가하지 않았습니다. `/api/auth/login`, `/api/auth/me`, `/api/auth/logout`의 요청·응답, 상태 코드와 쿠키 설정도 유지합니다.
+
+`npm test`는 비밀번호·입력 검증과 AuthService를 DB 없이 검사합니다. `npm run test:integration`은 실제 MySQL의 임시 DB에서 기존 해시 로그인, HTTP 응답 형식, DB 오류 응답, 세션과 기존 출결·신청 API를 검사합니다.
+
 ## Docker로 실행
 
 Docker Desktop을 실행한 뒤 저장소의 `Backend` 폴더에서 진행합니다.
@@ -40,7 +60,7 @@ export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"
 
 ## 계정 생성
 
-공개 회원가입 API와 자동 생성되는 기본 계정은 없습니다. 아래 명령을 실행하고 비밀번호를 입력하면 scrypt 해시로 저장합니다. 비밀번호는 화면이나 명령 인자에 표시되지 않습니다. 기존 계정은 덮어쓰지 않습니다.
+공개 회원가입 API와 서버 시작 시 자동 생성되는 계정은 없습니다. 아래 명령을 실행하고 비밀번호를 입력하면 scrypt 해시로 저장합니다. 비밀번호는 화면이나 명령 인자에 표시되지 않습니다. 기존 계정은 덮어쓰지 않습니다.
 
 ```bash
 docker compose exec backend npm run account:create -- --id student01 --name "홍길동" --room 301
@@ -53,6 +73,36 @@ docker compose exec backend npm run account:create -- --id admin01 --name "사�
 ```
 
 학생 계정은 호수가 필수입니다. 호수는 `A-301` 같은 값도 저장할 수 있도록 문자열입니다. 기존 계정의 비밀번호 해시, 이름, 호수는 유지하고 역할은 `STUDENT`로 설정합니다. 기존 계정을 자동으로 관리자로 승격하지 않습니다.
+
+## 다른 컴퓨터에서 테스트 데이터 만들기
+
+이 저장소의 최신 코드를 받은 뒤 `Backend` 폴더에서 `.env`를 설정하고 실행합니다.
+
+```bash
+docker compose up -d --build
+docker compose exec backend npm run db:seed
+```
+
+`scripts/seed.js`가 각 컴퓨터의 MySQL에 같은 가상 계정과 예시 기록을 생성합니다. 실제 학생 정보나 로컬 DB 백업을 GitHub에 올릴 필요가 없습니다.
+
+| 아이디 | 이름 | 호수 | 권한 | 비밀번호 |
+| --- | --- | --- | --- | --- |
+| `test_student01` | 테스트학생1 | 301 | 학생 | `1234` |
+| `test_student02` | 테스트학생2 | 302 | 학생 | `1234` |
+| `test_student03` | 테스트학생3 | 303 | 학생 | `1234` |
+| `test_admin01` | 테스트관리자 | — | 관리자 | `1234` |
+
+기준 날짜의 출결 4건(출석·지각·결석·공결), 다음 날 외출 신청 1건(대기), 이틀 뒤부터 나흘 뒤까지 귀가 신청 1건(승인)을 생성합니다. 날짜를 생략하면 실행한 날의 한국 날짜를 사용합니다. 모든 컴퓨터에서 날짜까지 맞추려면 같은 날짜를 지정하세요.
+
+```bash
+docker compose exec backend npm run db:seed -- --date 2026-10-22
+```
+
+같은 날짜로 반복하거나 동시에 실행해도 중복 생성하지 않습니다. 기존 계정의 비밀번호·권한과 이미 있는 출결·신청 상태를 덮어쓰지 않습니다. 같은 아이디에 다른 이름·호수·권한이 있으면 해당 계정과 관련 기록을 건너뜁니다. 다른 날짜를 지정하면 해당 날짜의 예시 기록을 추가합니다.
+
+이 계정과 공개 비밀번호는 개발 테스트용입니다. `NODE_ENV=production`에서는 seed 실행을 차단합니다. Docker 없이 실행할 때는 `Backend`에서 `npm run db:seed`를 사용합니다.
+
+프론트는 별도 터미널의 `Frontend` 폴더에서 `npm ci`, `npm run dev`로 실행합니다. 기존 세 학생 계정은 로컬 DB 데이터이며, 위의 가상 계정은 새 PC에서도 seed 명령으로 생성할 수 있습니다.
 
 ## 로그인 확인
 
@@ -82,7 +132,7 @@ curl -b cookies.txt -X POST http://localhost:3000/api/auth/logout
 
 팀원이 이 저장소를 clone하고 위의 `.env` 설정과 `docker compose up -d --build`를 실행하면 같은 구조의 DB와 API가 생성됩니다. 팀원 PC에 Node/MySQL을 별도로 설치할 필요가 없습니다. macOS/Windows/Linux에서 Docker Desktop 또는 Docker Engine + Compose를 사용할 수 있습니다.
 
-**각 PC의 데이터는 별개입니다. Docker나 Git이 DB의 실제 데이터를 자동 동기화하지는 않습니다.** 계정은 각 환경에서 위 명령으로 생성합니다.
+**각 PC의 데이터는 별개입니다. Docker나 Git이 DB의 실제 데이터를 자동 동기화하지는 않습니다.** `docker compose exec backend npm run db:seed`를 각자 실행하면 같은 테스트 계정과 예시 기록을 사용할 수 있습니다.
 
 ### 같은 데이터를 함께 사용하는 공용 개발 서버
 

@@ -16,9 +16,14 @@ process.env.DB_NAME = database;
 const { pool } = require('../src/config/db');
 const { migrate } = require('../src/database/migrate');
 const { hashPassword } = require('../src/lib/password');
-const { hashToken } = require('../src/middleware/auth');
+const { hashToken } = require('../src/lib/session');
 const { todayInSeoul } = require('../src/lib/validation');
 const app = require('../src/app');
+const legacyAccount = require('./fixtures/legacyAccount');
+const { seedTestData } = require('../scripts/seed');
+const { AuthService } = require('../src/services/authService');
+const UserRepository = require('../src/repositories/userRepository');
+const SessionRepository = require('../src/repositories/sessionRepository');
 
 const password = 'integration-password!';
 
@@ -54,6 +59,102 @@ test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한�
         const [tables] = await freshPool.query('SHOW TABLES');
         assert.equal(tables.length, 5);
       } finally { await freshPool.end(); }
+    });
+
+    await t.test('다른 컴퓨터용 테스트 데이터 seed', async (t) => {
+      const seedPool = mysql.createPool({ ...config, database: freshDatabase });
+      const date = '2026-10-22';
+      const cli = (...args) => spawnSync(process.execPath, ['scripts/seed.js', ...args], {
+        encoding: 'utf8', env: { ...process.env, DB_NAME: freshDatabase },
+      });
+      try {
+        await t.test('CLI가 기존 계정을 보존하고 학생·관리자·출결·외출·귀가를 생성한다', async () => {
+          const existingHash = await hashPassword('existing-password!');
+          await seedPool.execute('INSERT INTO user_accounts (id, name, room_number, password_hash) VALUES (?, ?, ?, ?)',
+            ['existing-user', '보존할 계정', '501', existingHash]);
+          const result = cli('--date', date);
+          assert.equal(result.status, 0, result.stderr);
+          assert.match(result.stdout, /계정 4개, 출결 4개, 외출\/귀가 신청 2개/);
+          const [[existing]] = await seedPool.query("SELECT password_hash FROM user_accounts WHERE id = 'existing-user'");
+          assert.equal(existing.password_hash, existingHash);
+          const [records] = await seedPool.query('SELECT attendance_date, status FROM attendance_records ORDER BY status');
+          assert.equal(records.length, 4);
+          assert.ok(records.every((record) => record.attendance_date === date));
+          assert.deepEqual(records.map((record) => record.status).sort(), ['ABSENT', 'EXCUSED', 'LATE', 'PRESENT']);
+          const [leaves] = await seedPool.query('SELECT type, status, starts_at, reviewed_by FROM leave_applications ORDER BY id');
+          assert.deepEqual(leaves.map((leave) => [leave.type, leave.status]), [['OUTING', 'PENDING'], ['HOME_VISIT', 'APPROVED']]);
+          assert.equal(leaves[0].starts_at.toISOString(), '2026-10-23T09:00:00.000Z');
+          assert.equal(leaves[1].reviewed_by, 'test_admin01');
+          const auth = new AuthService(new UserRepository(seedPool), new SessionRepository(seedPool));
+          const student = await auth.login('test_student01', '1234');
+          const admin = await auth.login('test_admin01', '1234');
+          assert.equal(student.role, 'STUDENT');
+          assert.equal(admin.role, 'ADMIN');
+          await auth.logout(student.accessToken);
+          await auth.logout(admin.accessToken);
+        });
+
+        await t.test('재실행·동시 실행에도 같은 날짜의 데이터가 중복되지 않는다', async () => {
+          const results = await Promise.all([seedTestData(seedPool, date), seedTestData(seedPool, date)]);
+          for (const result of results) {
+            assert.equal(result.accounts, 0);
+            assert.equal(result.attendance, 0);
+            assert.equal(result.leaves, 0);
+          }
+          const [[counts]] = await seedPool.query(`SELECT
+            (SELECT COUNT(*) FROM user_accounts) AS accounts,
+            (SELECT COUNT(*) FROM attendance_records) AS attendance,
+            (SELECT COUNT(*) FROM leave_applications) AS leaves`);
+          assert.deepEqual(counts, { accounts: 5, attendance: 4, leaves: 2 });
+        });
+
+        await t.test('생성 도중 실패하면 이미 추가한 기록도 롤백한다', async () => {
+          await seedPool.query(`CREATE TRIGGER seed_test_failure BEFORE INSERT ON attendance_records
+            FOR EACH ROW BEGIN
+              IF NEW.student_id = 'test_student03' THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'seed rollback test';
+              END IF;
+            END`);
+          try {
+            await assert.rejects(seedTestData(seedPool, '2026-12-01'), /seed rollback test/);
+            const [[count]] = await seedPool.query('SELECT COUNT(*) AS n FROM attendance_records');
+            assert.equal(count.n, 4);
+          } finally {
+            await seedPool.query('DROP TRIGGER seed_test_failure');
+          }
+        });
+
+        await t.test('수정한 비밀번호·권한·출결·신청 상태를 덮어쓰지 않는다', async () => {
+          const changedHash = await hashPassword('changed-password!');
+          await seedPool.execute("UPDATE user_accounts SET password_hash = ? WHERE id = 'test_student01'", [changedHash]);
+          await seedPool.query("UPDATE user_accounts SET role = 'STUDENT' WHERE id = 'test_admin01'");
+          await seedPool.query("UPDATE attendance_records SET status = 'EXCUSED' WHERE student_id = 'test_student01'");
+          await seedPool.query("UPDATE leave_applications SET status = 'CANCELLED' WHERE student_id = 'test_student01'");
+          const result = await seedTestData(seedPool, date);
+          assert.deepEqual(result.skippedAccounts, ['test_admin01']);
+          const [[student]] = await seedPool.query("SELECT password_hash FROM user_accounts WHERE id = 'test_student01'");
+          const [[admin]] = await seedPool.query("SELECT role FROM user_accounts WHERE id = 'test_admin01'");
+          const [[record]] = await seedPool.query("SELECT status FROM attendance_records WHERE student_id = 'test_student01'");
+          const [[leave]] = await seedPool.query("SELECT status FROM leave_applications WHERE student_id = 'test_student01'");
+          assert.equal(student.password_hash, changedHash);
+          assert.equal(admin.role, 'STUDENT');
+          assert.equal(record.status, 'EXCUSED');
+          assert.equal(leave.status, 'CANCELLED');
+        });
+
+        await t.test('잘못된 날짜와 운영 환경에서는 데이터를 추가하지 않는다', async () => {
+          assert.equal(cli('--date', '2026-02-30').status, 1);
+          const result = spawnSync(process.execPath, ['scripts/seed.js', '--date', date], {
+            encoding: 'utf8', env: { ...process.env, DB_NAME: freshDatabase, NODE_ENV: 'production' },
+          });
+          assert.equal(result.status, 1);
+          assert.match(result.stderr, /운영 환경/);
+          const [[count]] = await seedPool.query('SELECT COUNT(*) AS n FROM user_accounts');
+          assert.equal(count.n, 5);
+        });
+      } finally {
+        await seedPool.end();
+      }
     });
 
     await t.test('기존 계정/해시/호수와 원본 신청 데이터를 보존한다', async () => {
@@ -117,15 +218,54 @@ test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한�
       assert.equal(student.status, 200);
       assert.equal(student.body.roomNumber, '301');
       assert.equal(student.body.role, 'STUDENT');
+      assert.deepEqual(Object.keys(student.body).sort(), ['accessToken', 'expiresAt', 'id', 'name', 'role', 'roomNumber']);
+      assert.equal(student.headers.get('cache-control'), 'no-store');
+      assert.match(student.body.accessToken, /^[a-f0-9]{64}$/);
+      assert.equal(new Date(student.body.expiresAt).toISOString(), student.body.expiresAt);
       assert.ok(!JSON.stringify(student.body).includes('password'));
       const cookie = student.headers.get('set-cookie');
+      assert.match(cookie, /^mentos_session=/);
+      assert.match(cookie, /Path=\//);
       assert.match(cookie, /HttpOnly/);
       assert.match(cookie, /SameSite=Lax/);
       assert.equal((await request('/api/auth/me', { token: student.body.accessToken })).body.id, 'student1');
-      assert.equal((await request('/api/auth/me', { headers: { Cookie: cookie.split(';')[0] } })).status, 200);
+      const me = await request('/api/auth/me', { headers: { Cookie: cookie.split(';')[0] } });
+      assert.equal(me.status, 200);
+      assert.deepEqual(me.body, { id: 'student1', name: '학생1', roomNumber: '301', role: 'STUDENT' });
       const [[session]] = await pool.execute('SELECT token_hash FROM login_sessions WHERE account_id = ?', ['student1']);
       assert.equal(session.token_hash, hashToken(student.body.accessToken));
       assert.notEqual(session.token_hash, student.body.accessToken);
+    });
+
+    await t.test('기존 고정 scrypt 해시와 4자리 비밀번호가 변경 없이 로그인된다', async () => {
+      await pool.execute('INSERT INTO user_accounts (id, name, room_number, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+        [legacyAccount.id, legacyAccount.name, legacyAccount.roomNumber, legacyAccount.password_hash, legacyAccount.role]);
+      const response = await login(` ${legacyAccount.id} `, legacyAccount.password);
+      assert.equal(response.status, 200);
+      assert.equal(response.body.id, legacyAccount.id);
+      const [[saved]] = await pool.execute('SELECT password_hash FROM user_accounts WHERE id = ?', [legacyAccount.id]);
+      assert.equal(saved.password_hash, legacyAccount.password_hash);
+      const logout = await request('/api/auth/logout', { method: 'POST', token: response.body.accessToken });
+      assert.equal(logout.status, 204);
+      assert.equal(logout.body, null);
+      assert.match(logout.headers.get('set-cookie'), /mentos_session=;/);
+      assert.match(logout.headers.get('set-cookie'), /Max-Age=0/);
+      const expired = await request('/api/auth/me', { token: response.body.accessToken });
+      assert.equal(expired.status, 401);
+      assert.deepEqual(expired.body, { message: '세션이 만료되었습니다. 다시 로그인해주세요.' });
+    });
+
+    await t.test('로그인과 세션 조회의 DB 오류는 상세 정보 없이 기존 500 형식으로 응답한다', async (t) => {
+      const failure = new Error('private database detail');
+      failure.code = 'ER_TEST_UNAVAILABLE';
+      t.mock.method(pool, 'execute', async () => { throw failure; });
+      const response = await login('student1');
+      assert.equal(response.status, 500);
+      assert.deepEqual(response.body, { message: '요청을 처리할 수 없습니다.' });
+      assert.equal(response.headers.get('set-cookie'), null);
+      const me = await request('/api/auth/me', { token: student.body.accessToken });
+      assert.equal(me.status, 500);
+      assert.deepEqual(me.body, { message: '요청을 처리할 수 없습니다.' });
     });
 
     await t.test('허용된 프론트 출처만 쿠키 인증 API를 호출할 수 있다', async () => {
