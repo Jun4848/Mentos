@@ -3,16 +3,18 @@ import schoolLogo from "./schoollogo.png";
 import { useNavigate } from "react-router-dom";
 import LoginInput from "./LoginInput";
 import { useState } from "react";
-import CheckEmpty from "./CheckEmpty";
+
+import CheckLoginEmpty from "./CheckLoginEmpty";
 const LoginPage = ({setMainId, setMainName, setMainRole}) => {
   const [Id,setId] = useState("")
   const [Password,setPassword] = useState("")
   const [Loading,setLoading] = useState(false)
   const nav = useNavigate()
 
+
   async function Login(e) {
     e.preventDefault();
-    if (Loading || !CheckEmpty({Id,Password})) return;
+    if (Loading || !CheckLoginEmpty({Id,Password})) return;
 
     setLoading(true);
     try {
@@ -50,6 +52,7 @@ const LoginPage = ({setMainId, setMainName, setMainRole}) => {
         />
         <h1 className="font-medium text-2xl">기숙사 출석체크</h1>
 
+
         <LoginInput type="text" placeholder="아이디" onChange={(e)=>{setId(e.target.value)}}/> {/* 아이디 입력창 */}
         <LoginInput type="password" placeholder="비밀번호" onChange={(e)=>{setPassword(e.target.value)}}/> {/* 비밀번호 입력창 */}
 
@@ -62,6 +65,7 @@ const LoginPage = ({setMainId, setMainName, setMainRole}) => {
         </button>
       </form>
       <div> {/*페이지간 이동용 버튼 -> 곧 없앨거임*/}
+
         <button onClick={()=>{nav("/main")}}>
             메인페이지
         </button>

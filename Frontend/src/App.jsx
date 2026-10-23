@@ -1,5 +1,5 @@
 import './App.css'
-import LoginPage from './LoginPage'
+import LoginPage from './Login/LoginPage'
 import MainPage from './MainPage'
 import AdminPage from './AdminPage';
 import { Routes,Route,Navigate } from "react-router-dom";
