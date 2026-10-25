@@ -1,16 +1,11 @@
-const { randomBytes } = require('node:crypto');
-const { pool } = require('../config/db');
-const { verifyPassword } = require('../lib/password');
-const { HttpError } = require('../lib/http');
-const { text } = require('../lib/validation');
-const { hashToken, setSessionCookie } = require('../middleware/auth');
+const { authService } = require('../services/authService');
+const { setSessionCookie } = require('../lib/session');
 
-async function login(req, res) {
-  const id = text(req.body?.id, '아이디', 50);
-  const password = req.body?.password;
-  if (typeof password !== 'string' || !password || password.length > 128) {
-    throw new HttpError(400, '아이디와 비밀번호를 확인해주세요.');
+class AuthController {
+  constructor(service = authService) {
+    this.authService = service;
   }
+<<<<<<< HEAD
   const [accounts] = await pool.execute(
     'SELECT id, name, room_number AS roomNumber, password_hash, role, status FROM user_accounts WHERE id = ?', [id],
   );
@@ -28,16 +23,28 @@ async function login(req, res) {
   setSessionCookie(res, accessToken, maxAge);
   res.set('Cache-Control', 'no-store');
   res.json({ id: account.id, name: account.name, roomNumber: account.roomNumber, role: account.role, status: account.status, accessToken, expiresAt: expiresAt.toISOString() });
+<<<<<<< Updated upstream
+=======
+=======
+
+  async login(req, res) {
+    const { maxAge, ...data } = await this.authService.login(req.body?.id, req.body?.password);
+    setSessionCookie(res, data.accessToken, maxAge);
+    res.set('Cache-Control', 'no-store');
+    res.json(data);
+  }
+
+  me(req, res) {
+    res.json(req.account);
+  }
+
+  async logout(req, res) {
+    await this.authService.logout(req.sessionToken);
+    setSessionCookie(res, '', 0);
+    res.status(204).end();
+  }
+>>>>>>> 636ef0314c1757401e7584a1d38b313850dbf995
+>>>>>>> Stashed changes
 }
 
-function me(req, res) {
-  res.json(req.account);
-}
-
-async function logout(req, res) {
-  await pool.execute('DELETE FROM login_sessions WHERE token_hash = ?', [hashToken(req.sessionToken)]);
-  setSessionCookie(res, '', 0);
-  res.status(204).end();
-}
-
-module.exports = { login, me, logout };
+module.exports = AuthController;

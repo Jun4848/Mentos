@@ -13,7 +13,6 @@ async function list(req, res) {
   const conditions = ['r.attendance_date = ?'];
   const values = [date];
   if (req.account.role === 'STUDENT') {
-    // DB의 실제 ID를 사용하므로 대소문자 차이를 이용한 우회도 불가능합니다.
     if (req.query.studentId !== undefined && req.query.studentId !== req.account.id) throw new HttpError(403, '본인 출결만 조회할 수 있습니다.');
     conditions.push('r.student_id = ?');
     values.push(req.account.id);
@@ -32,7 +31,7 @@ async function list(req, res) {
 async function checkIn(req, res) {
   const period = oneOf(req.body?.period, PERIODS, '시간대');
   const date = todayInSeoul();
-  // 학생은 당일 본인 출석만 제출하며, 클라이언트가 보낸 날짜/상태/아이디는 거부합니다.
+  // 학생은 당일 본인 출석만 제출, 클라이언트가 보낸 날짜/상태/아이디는 거부.
   if (['studentId', 'status', 'date'].some((key) => req.body[key] !== undefined)) {
     throw new HttpError(400, '학생 출석 요청에는 period만 입력해주세요.');
   }
@@ -64,3 +63,5 @@ async function record(req, res) {
 }
 
 module.exports = { list, checkIn, record };
+
+
