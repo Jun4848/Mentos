@@ -12,7 +12,7 @@ async function login(req, res) {
     throw new HttpError(400, '아이디와 비밀번호를 확인해주세요.');
   }
   const [accounts] = await pool.execute(
-    'SELECT id, name, room_number AS roomNumber, password_hash, role FROM user_accounts WHERE id = ?', [id],
+    'SELECT id, name, room_number AS roomNumber, password_hash, role, status FROM user_accounts WHERE id = ?', [id],
   );
   const account = accounts[0];
   if (!await verifyPassword(password, account?.password_hash)) {
@@ -27,7 +27,7 @@ async function login(req, res) {
   await pool.execute('INSERT INTO login_sessions (token_hash, account_id, expires_at) VALUES (?, ?, ?)', [hashToken(accessToken), account.id, expiresAt]);
   setSessionCookie(res, accessToken, maxAge);
   res.set('Cache-Control', 'no-store');
-  res.json({ id: account.id, name: account.name, roomNumber: account.roomNumber, role: account.role, accessToken, expiresAt: expiresAt.toISOString() });
+  res.json({ id: account.id, name: account.name, roomNumber: account.roomNumber, role: account.role, status: account.status, accessToken, expiresAt: expiresAt.toISOString() });
 }
 
 function me(req, res) {

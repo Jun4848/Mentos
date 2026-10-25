@@ -118,6 +118,7 @@ Docker 공식 문서: [Compose 네트워크](https://docs.docker.com/compose/how
 - 과거 `choice` 값이 잔류/귀가 선택인지 불분명하므로 원본 신청을 새 신청으로 임의 변환하지 않습니다. 보관된 과거 신청은 새 API 목록에 합쳐지지 않습니다. 데이터가 있는 다른 팀원 DB에서는 의미를 확인한 뒤 별도 이전할 수 있습니다.
 - 이번 로컬 DB 적용 전 계정은 3개, 기존 신청은 각 0개였습니다. 적용 전 백업은 `backups/before-auth-migration-20261020.sql`에 있으며 Git/Docker 빌드 대상에서 제외했습니다.
 - `schema_migrations`에 적용 버전을 기록하고 DB 잠금으로 동시 실행을 막습니다. 계정 테이블 두 종류가 동시에 있으면 자동 덮어쓰기 대신 오류를 냅니다.
+- `002_account_status`는 `user_accounts`에 `status VARCHAR(15) NOT NULL DEFAULT ''`를 추가합니다. 기존 계정과 상태를 지정하지 않은 새 계정의 기본값은 빈 문자열입니다.
 
 수동 실행:
 

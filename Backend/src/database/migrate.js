@@ -9,6 +9,20 @@ async function tableExists(connection, name) {
   return rows.length > 0;
 }
 
+async function migrateAccountStatus(connection) {
+  const version = '002_account_status';
+  const [versions] = await connection.execute('SELECT version FROM schema_migrations WHERE version = ?', [version]);
+  if (versions.length) return;
+  const [columns] = await connection.query("SHOW COLUMNS FROM user_accounts LIKE 'status'");
+  // DDL 성공 후 버전 기록 전에 중단되어도 기존 상태 값을 보존합니다.
+  if (!columns.length) {
+    const sql = await fs.readFile(path.join(__dirname, '002_account_status.sql'), 'utf8');
+    await connection.query(sql);
+  }
+  await connection.execute('INSERT INTO schema_migrations (version) VALUES (?)', [version]);
+  console.log(`Database migration ${version} applied`);
+}
+
 async function migrate(database = pool) {
   const connection = await database.getConnection();
   let locked = false;
@@ -21,7 +35,10 @@ async function migrate(database = pool) {
       applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB`);
     const [versions] = await connection.execute('SELECT version FROM schema_migrations WHERE version = ?', ['001_initial']);
-    if (versions.length) return;
+    if (versions.length) {
+      await migrateAccountStatus(connection);
+      return;
+    }
     if (await tableExists(connection, 'users')) {
       if (await tableExists(connection, 'user_accounts')) {
         throw new Error('users와 user_accounts가 모두 있습니다. 백업 후 계정 충돌을 먼저 확인해주세요.');
@@ -53,6 +70,7 @@ async function migrate(database = pool) {
     }
     await connection.execute('INSERT INTO schema_migrations (version) VALUES (?)', ['001_initial']);
     console.log('Database migration 001_initial applied');
+    await migrateAccountStatus(connection);
   } finally {
     if (locked) await connection.query("SELECT RELEASE_LOCK(CONCAT('mentos:', LEFT(DATABASE(), 50)))");
     connection.release();

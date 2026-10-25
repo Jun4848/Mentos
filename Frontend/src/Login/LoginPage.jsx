@@ -5,12 +5,11 @@ import LoginInput from "./LoginInput";
 import { useState } from "react";
 
 import CheckLoginEmpty from "./CheckLoginEmpty";
-const LoginPage = ({setMainId, setMainName, setMainRole}) => {
+const LoginPage = ({setMainId, setMainName, setMainRole, setRn, setStat}) => {
   const [Id,setId] = useState("")
   const [Password,setPassword] = useState("")
   const [Loading,setLoading] = useState(false)
   const nav = useNavigate()
-
 
   async function Login(e) {
     e.preventDefault();
@@ -34,6 +33,8 @@ const LoginPage = ({setMainId, setMainName, setMainRole}) => {
       setMainId(data.id);
       setMainName(data.name);
       setMainRole(data.role);
+      setRn(data.roomNumber)
+      setStat(data.status)
       nav(data.role === "ADMIN" ? "/admin" : "/main", {replace: true});
     } catch {
       alert("서버에 연결할 수 없습니다.");//백엔드 꺼져 있을때
@@ -64,15 +65,6 @@ const LoginPage = ({setMainId, setMainName, setMainRole}) => {
           {Loading ? "로그인 중..." : "로그인"}
         </button>
       </form>
-      <div> {/*페이지간 이동용 버튼 -> 곧 없앨거임*/}
-
-        <button onClick={()=>{nav("/main")}}>
-            메인페이지
-        </button>
-        <button onClick={()=>{nav("/admin")}}>
-          어드민페이지
-        </button>
-      </div>
     </div>
   );
 };

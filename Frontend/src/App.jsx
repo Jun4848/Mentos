@@ -10,6 +10,8 @@ function App() {
   const [MainId,setMainId] = useState("");
   const [MainName,setMainName] = useState("");
   const [MainRole,setMainRole] = useState("");
+  const [Rn,setRn] = useState("")
+  const [Stat,setStat] = useState("")
   const [CheckingLogin,setCheckingLogin] = useState(true);
 
   useEffect(() => {
@@ -21,6 +23,8 @@ function App() {
           setMainId(data.id);
           setMainName(data.name);
           setMainRole(data.role);
+          setRn(data.roomNumber);
+          setStat(data.status);
         }
       } catch {
         return;
@@ -36,8 +40,8 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path='/' element={<LoginPage setMainId={setMainId} setMainName={setMainName} setMainRole={setMainRole}/>}></Route>
-        <Route path='/main' element={MainId ? <MainPage day={day} Id={MainId} Name={MainName}/> : <Navigate to="/" replace/>}></Route>
+        <Route path='/' element={<LoginPage setMainId={setMainId} setMainName={setMainName} setMainRole={setMainRole} setRn={setRn} setStat={setStat}/>}></Route>
+        <Route path='/main' element={MainId ? <MainPage day={day} Id={MainId} Name={MainName} Rn={Rn} Stat={Stat} setMainId={setMainId} setMainName={setMainName} setMainRole={setMainRole} setRn={setRn} setStat={setStat}/> : <Navigate to="/" replace/>}></Route>
         <Route path='/admin' element={MainRole === "ADMIN" ? <AdminPage/> : <Navigate to="/" replace/>}></Route>
       </Routes>
     </>

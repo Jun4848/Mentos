@@ -50,9 +50,44 @@ test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한�
         await migrate(freshPool);
         await migrate(freshPool);
         const [[count]] = await freshPool.query('SELECT COUNT(*) AS n FROM schema_migrations');
-        assert.equal(count.n, 1);
+        assert.equal(count.n, 2);
         const [tables] = await freshPool.query('SHOW TABLES');
         assert.equal(tables.length, 5);
+      } finally { await freshPool.end(); }
+    });
+
+    await t.test('001 적용 DB에 status를 추가하고 기존 계정과 재실행 시 상태를 보존한다', async () => {
+      const freshPool = mysql.createPool({ ...config, database: freshDatabase });
+      try {
+        // 임시 DB를 001만 적용된 구조로 되돌려 기존 설치의 업그레이드를 검증합니다.
+        await freshPool.query('ALTER TABLE user_accounts DROP COLUMN status');
+        await freshPool.execute('DELETE FROM schema_migrations WHERE version = ?', ['002_account_status']);
+        const hash = await hashPassword(password);
+        await freshPool.execute('INSERT INTO user_accounts (id, name, room_number, password_hash) VALUES (?, ?, ?, ?)',
+          ['existing-student', '기존학생', '401', hash]);
+
+        await migrate(freshPool);
+        const [[account]] = await freshPool.query("SELECT * FROM user_accounts WHERE id = 'existing-student'");
+        assert.equal(account.name, '기존학생');
+        assert.equal(account.room_number, '401');
+        assert.equal(account.password_hash, hash);
+        assert.equal(account.status, '');
+        const [[column]] = await freshPool.query("SHOW COLUMNS FROM user_accounts LIKE 'status'");
+        assert.equal(column.Type, 'varchar(15)');
+        assert.equal(column.Null, 'NO');
+        assert.equal(column.Default, '');
+        await assert.rejects(freshPool.query("UPDATE user_accounts SET status = NULL WHERE id = 'existing-student'"), { code: 'ER_BAD_NULL_ERROR' });
+        await assert.rejects(freshPool.execute("UPDATE user_accounts SET status = ? WHERE id = 'existing-student'", ['x'.repeat(16)]), { code: 'ER_DATA_TOO_LONG' });
+
+        await freshPool.execute("UPDATE user_accounts SET status = ? WHERE id = 'existing-student'", ['잔류']);
+        // 컬럼 추가 후 버전 기록 전에 중단된 경우도 기존 값을 유지해야 합니다.
+        await freshPool.execute('DELETE FROM schema_migrations WHERE version = ?', ['002_account_status']);
+        await migrate(freshPool);
+        await migrate(freshPool);
+        const [[saved]] = await freshPool.query("SELECT status FROM user_accounts WHERE id = 'existing-student'");
+        assert.equal(saved.status, '잔류');
+        const [[count]] = await freshPool.query('SELECT COUNT(*) AS n FROM schema_migrations');
+        assert.equal(count.n, 2);
       } finally { await freshPool.end(); }
     });
 
@@ -74,6 +109,7 @@ test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한�
       assert.equal(account.password_hash, hash);
       assert.equal(account.room_number, '301');
       assert.equal(account.role, 'STUDENT');
+      assert.equal(account.status, '');
       const [[stay]] = await pool.query('SELECT choice FROM legacy_home_stay');
       assert.equal(stay.choice, '잔류');
       const [[oldLeave]] = await pool.query('SELECT type FROM legacy_leave_requests');
@@ -111,18 +147,25 @@ test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한�
     });
 
     await t.test('로그인은 세션을 발급하며 쿠키와 Bearer를 모두 지원한다', async () => {
+      await pool.execute('UPDATE user_accounts SET status = ? WHERE id = ?', ['잔류', 'student1']);
+      await pool.execute('UPDATE user_accounts SET status = ? WHERE id = ?', ['귀가', 'student2']);
       student = await login('student1');
       other = await login('student2');
       admin = await login('admin');
       assert.equal(student.status, 200);
       assert.equal(student.body.roomNumber, '301');
       assert.equal(student.body.role, 'STUDENT');
+      assert.equal(student.body.status, '잔류');
+      assert.equal(other.body.status, '귀가');
+      assert.equal(admin.body.status, '');
       assert.ok(!JSON.stringify(student.body).includes('password'));
       const cookie = student.headers.get('set-cookie');
       assert.match(cookie, /HttpOnly/);
       assert.match(cookie, /SameSite=Lax/);
       assert.equal((await request('/api/auth/me', { token: student.body.accessToken })).body.id, 'student1');
-      assert.equal((await request('/api/auth/me', { headers: { Cookie: cookie.split(';')[0] } })).status, 200);
+      const restored = await request('/api/auth/me', { headers: { Cookie: cookie.split(';')[0] } });
+      assert.equal(restored.status, 200);
+      assert.equal(restored.body.status, student.body.status);
       const [[session]] = await pool.execute('SELECT token_hash FROM login_sessions WHERE account_id = ?', ['student1']);
       assert.equal(session.token_hash, hashToken(student.body.accessToken));
       assert.notEqual(session.token_hash, student.body.accessToken);

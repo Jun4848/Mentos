@@ -17,7 +17,7 @@ const requireAuth = asyncHandler(async (req, res, next) => {
   const token = readToken(req);
   if (!token) throw new HttpError(401, '로그인이 필요합니다.');
   const [accounts] = await pool.execute(`
-    SELECT a.id, a.name, a.room_number AS roomNumber, a.role
+    SELECT a.id, a.name, a.room_number AS roomNumber, a.role, a.status
     FROM login_sessions s JOIN user_accounts a ON a.id = s.account_id
     WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP()
   `, [hashToken(token)]);

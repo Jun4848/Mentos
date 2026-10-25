@@ -25,12 +25,15 @@
   "name": "홍길동",
   "roomNumber": "301",
   "role": "STUDENT",
+  "status": "잔류",
   "accessToken": "64자리 임의 토큰",
   "expiresAt": "2026-10-21T00:00:00.000Z"
 }
 ```
 
 `Set-Cookie`의 `mentos_session` 또는 `Authorization: Bearer <accessToken>`을 이후 요청에 전달합니다. Bearer 헤더가 있으면 쿠키보다 우선합니다. `/me`는 토큰·만료 시간을 제외한 계정 정보를 반환합니다. 비밀번호/해시는 응답에 포함하지 않습니다. 만료·로그아웃 후에는 401입니다.
+
+로그인과 `/me` 응답의 `status`는 계정에 저장된 상태 문자열(예: `잔류`, `귀가`)이며, 미설정 시 빈 문자열입니다.
 
 ## 출결
 
