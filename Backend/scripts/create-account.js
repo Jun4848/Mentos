@@ -56,6 +56,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error.code === 'ER_DUP_ENTRY' ? '이미 존재하는 아이디입니다. 기존 계정은 변경하지 않았습니다.' : error.message);
+  console.error(['ER_DUP_ENTRY', '23505'].includes(error.code) ? '이미 존재하는 아이디입니다. 기존 계정은 변경하지 않았습니다.' : error.message);
   process.exitCode = 1;
 }).finally(() => pool.end());

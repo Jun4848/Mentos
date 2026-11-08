@@ -7,10 +7,10 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "db:migrate": "node scripts/migrate.js",
-    "db:seed": "node scripts/seed.js",
     "account:create": "node scripts/create-account.js",
-    "test": "node --test test/unit.test.js test/authService.test.js",
-    "test:integration": "node --test test/integration.test.js test/loginProtection.integration.test.js"
+    "test": "node --test test/unit.test.js test/network.test.js",
+    "test:integration": "node --test test/integration.test.js",
+    "test:postgres": "node --test test/postgres.integration.test.js"
   },
   "keywords": [],
   "author": "D.A.M.S team",
@@ -19,6 +19,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "mysql2": "^3.11.5"
+    "mysql2": "^3.11.5",
+    "pg": "^8.23.1"
   }
 }

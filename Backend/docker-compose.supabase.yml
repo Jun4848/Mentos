@@ -1,0 +1,19 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:?Set the Supabase session pooler DATABASE_URL in .env}
+      TZ: UTC
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      start_period: 15s
+      interval: 10s
+      timeout: 5s
+      retries: 6

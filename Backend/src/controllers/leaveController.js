@@ -1,4 +1,4 @@
-const { pool } = require('../config/db');
+const { pool, currentTimestamp, returningId } = require('../config/db');
 const { HttpError } = require('../lib/http');
 const { text, oneOf, timestamp, positiveId } = require('../lib/validation');
 
@@ -23,9 +23,9 @@ async function list(req, res) {
   }
   const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > 1000000) throw new HttpError(400, 'offset 값을 확인해주세요.');
-  const [applications] = await pool.query(`SELECT l.id, l.student_id AS studentId, a.name,
-    a.room_number AS roomNumber, l.type, l.starts_at AS startsAt, l.ends_at AS endsAt,
-    l.reason, l.status, l.reviewed_by AS reviewedBy, l.reviewed_at AS reviewedAt
+  const [applications] = await pool.query(`SELECT l.id, l.student_id AS "studentId", a.name,
+    a.room_number AS "roomNumber", l.type, l.starts_at AS "startsAt", l.ends_at AS "endsAt",
+    l.reason, l.status, l.reviewed_by AS "reviewedBy", l.reviewed_at AS "reviewedAt"
     FROM leave_applications l JOIN user_accounts a ON a.id = l.student_id
     ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
     ORDER BY l.starts_at DESC, l.id DESC LIMIT 100 OFFSET ?`, [...values, offset]);
@@ -48,7 +48,7 @@ async function create(req, res) {
     [req.account.id, endsAt, startsAt]);
     if (overlaps.length) throw new HttpError(409, '같은 기간에 대기 또는 승인된 신청이 있습니다.');
     const [result] = await connection.execute(`INSERT INTO leave_applications
-      (student_id, type, starts_at, ends_at, reason) VALUES (?, ?, ?, ?, ?)`,
+      (student_id, type, starts_at, ends_at, reason) VALUES (?, ?, ?, ?, ?)${returningId}`,
     [req.account.id, type, startsAt, endsAt, reason]);
     await connection.commit();
     res.status(201).json({ id: result.insertId, studentId: req.account.id, type, startsAt, endsAt, reason, status: 'PENDING' });
@@ -76,7 +76,7 @@ async function changeStatus(req, res) {
     if (status === 'CANCELLED') {
       await connection.execute("UPDATE leave_applications SET status = 'CANCELLED' WHERE id = ?", [id]);
     } else {
-      await connection.execute('UPDATE leave_applications SET status = ?, reviewed_by = ?, reviewed_at = UTC_TIMESTAMP() WHERE id = ?', [status, req.account.id, id]);
+      await connection.execute(`UPDATE leave_applications SET status = ?, reviewed_by = ?, reviewed_at = ${currentTimestamp} WHERE id = ?`, [status, req.account.id, id]);
     }
     await connection.commit();
     res.json({ id, status });

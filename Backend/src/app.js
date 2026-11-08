@@ -2,8 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const routes = require('./routes');
 const { HttpError } = require('./lib/http');
+const { trustedProxies } = require('./config/network');
 const app = express();
 app.disable('x-powered-by');
+// 명시한 프록시를 거친 요청에서만 전달된 클라이언트 IP를 사용합니다.
+app.set('trust proxy', trustedProxies.matches);
 
 const allowedOrigins = new Set((process.env.FRONTEND_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
   .split(',').map((origin) => origin.trim()).filter(Boolean));
@@ -26,10 +29,7 @@ app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);
   if (error.type === 'entity.parse.failed') return res.status(400).json({ message: '올바른 JSON을 입력해주세요.' });
   if (error.type === 'entity.too.large') return res.status(413).json({ message: '요청 본문이 너무 큽니다.' });
-  if (error instanceof HttpError) {
-    if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
-    return res.status(error.status).json({ message: error.message });
-  }
+  if (error instanceof HttpError) return res.status(error.status).json({ message: error.message });
   console.error('API failed:', error.code || error.message);
   res.status(500).json({ message: '요청을 처리할 수 없습니다.' });
 });
