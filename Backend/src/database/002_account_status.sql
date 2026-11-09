@@ -1,0 +1,2 @@
+ALTER TABLE user_accounts
+  ADD COLUMN status VARCHAR(15) NOT NULL DEFAULT '' AFTER role;

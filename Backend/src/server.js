@@ -33,10 +33,10 @@ async function startServer() {
   try {
     await connectToDatabaseWithRetry();
     await migrate();
-    console.log('MySQL connection successful');
+    console.log('Database connection successful');
   } catch (error) {
     const errorMessage = error.message || error.code || '알 수 없는 오류';
-    console.error('MySQL connection failed:', errorMessage);
+    console.error('Database connection failed:', errorMessage);
     await pool.end();
     process.exitCode = 1;
     return;
