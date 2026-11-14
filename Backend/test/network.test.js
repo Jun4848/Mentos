@@ -52,6 +52,33 @@ test('잘못된 설정은 실행 시 거부하고 IP를 미설정하면 출석�
   }
 });
 
+test('Vercel에서는 마지막 전달 IP를 사용하고 다른 환경에서는 비신뢰 헤더를 무시한다', () => {
+  const script = `
+    const app = require('./src/app');
+    const req = Object.create(app.request);
+    Object.defineProperties(req, {
+      socket: { value: { remoteAddress: '10.0.0.2' } },
+      headers: { value: {
+        'x-forwarded-for': '198.51.100.99, 192.0.2.10',
+        'x-forwarded-proto': 'https',
+      } },
+    });
+    console.log(JSON.stringify({ ip: req.ip, protocol: req.protocol }));
+  `;
+  for (const [platform, expected] of [
+    ['1', { ip: '192.0.2.10', protocol: 'https' }],
+    ['0', { ip: '10.0.0.2', protocol: 'http' }],
+  ]) {
+    const result = spawnSync(process.execPath, ['-e', script], {
+      cwd: require('node:path').resolve(__dirname, '..'),
+      env: { ...process.env, VERCEL: platform, TRUSTED_PROXY_IPS: '' },
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), expected);
+  }
+});
+
 test('HTTP: 네트워크 확인과 출석 저장에 동일한 IP 제한을 적용한다', async (t) => {
   const studentToken = 'a'.repeat(64);
   const adminToken = 'b'.repeat(64);

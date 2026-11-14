@@ -5,8 +5,8 @@ const { HttpError } = require('./lib/http');
 const { trustedProxies } = require('./config/network');
 const app = express();
 app.disable('x-powered-by');
-// 명시한 프록시를 거친 요청에서만 전달된 클라이언트 IP를 사용합니다.
-app.set('trust proxy', trustedProxies.matches);
+// Vercel이 재작성한 마지막 전달 IP를 사용하고, 그 밖의 환경은 등록된 프록시만 신뢰합니다.
+app.set('trust proxy', process.env.VERCEL === '1' ? 1 : trustedProxies.matches);
 
 const allowedOrigins = new Set((process.env.FRONTEND_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
   .split(',').map((origin) => origin.trim()).filter(Boolean));
