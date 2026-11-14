@@ -4,7 +4,7 @@
     "frontend": {
       "root": "Frontend",
       "framework": "vite",
-      "installCommand": "npm ci",
+      "installCommand": "npm ci --include=dev",
       "buildCommand": "npm run build",
       "outputDirectory": "dist",
       "rewrites": [
@@ -14,11 +14,12 @@
     "backend": {
       "root": "Backend",
       "framework": "express",
-      "entrypoint": "src/server.js",
-      "installCommand": "npm ci",
+      "entrypoint": "server.cjs",
+      "installCommand": "npm ci --include=dev",
+      "buildCommand": "npm run build",
       "functions": {
-        "src/server.js": {
-          "includeFiles": "{certs/**,src/database/**/*.sql}"
+        "server.cjs": {
+          "includeFiles": "{certs/**,dist/**}"
         }
       }
     }

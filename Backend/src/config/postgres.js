@@ -22,7 +22,9 @@ function createPostgresPool(env = process.env) {
     connectionString: url.toString(),
     ssl: sslDisabled ? false : {
       rejectUnauthorized: true,
-      ...(env.DATABASE_SSL_CA_FILE ? { ca: fs.readFileSync(env.DATABASE_SSL_CA_FILE, 'utf8') } : {}),
+      // 함수 번들에서 파일 경로가 바뀌어도 동일한 CA로 검증할 수 있도록 PEM 환경변수를 우선합니다.
+      ...(env.DATABASE_SSL_CA ? { ca: env.DATABASE_SSL_CA }
+        : env.DATABASE_SSL_CA_FILE ? { ca: fs.readFileSync(env.DATABASE_SSL_CA_FILE, 'utf8') } : {}),
     },
     max: 5,
     connectionTimeoutMillis: 10000,

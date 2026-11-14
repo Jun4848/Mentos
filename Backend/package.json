@@ -1,9 +1,11 @@
 {
   "name": "dams-backend",
   "version": "1.0.0",
+  "type": "commonjs",
   "description": "기숙사 출결 관리 시스템 백엔드 개발환경",
   "main": "src/server.js",
   "scripts": {
+    "build": "ncc build src/server.js -o dist",
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "db:migrate": "node scripts/migrate.js",
@@ -21,5 +23,8 @@
     "express": "^4.21.2",
     "mysql2": "^3.11.5",
     "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "0.45.0"
   }
 }
