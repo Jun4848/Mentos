@@ -1,0 +1,44 @@
+.login-time-toggle {
+  position: fixed;
+  z-index: 20;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  width: 190px;
+  max-width: calc(100vw - 32px);
+  padding: 2px 12px 8px;
+  border: 1px solid #e2e9e3;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 12px #23462c0d;
+  color: #3d5145;
+  font-family: inherit;
+}
+.login-time-toggle.is-enabled { border-color: #a3d3b8; background: #f6fcf8; }
+.login-time-toggle > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.login-time-toggle > button:disabled { cursor: wait; opacity: .55; }
+.login-time-toggle-label { font-size: 12px; font-weight: 600; }
+.login-time-toggle-track { flex-shrink: 0; width: 34px; height: 20px; padding: 3px; border-radius: 20px; background: #d4ddd5; transition: background .15s; }
+.login-time-toggle-track i { display: block; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #173e2926; transition: transform .15s; }
+.login-time-toggle.is-enabled .login-time-toggle-track { background: #059669; }
+.login-time-toggle.is-enabled .login-time-toggle-track i { transform: translateX(14px); }
+.login-time-toggle > p { margin: 0; color: #68766c; font-size: 10px; line-height: 1.5; }
+.login-time-toggle.is-enabled > p { color: #348360; }
+.login-time-toggle-error { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; color: #a66331; font-size: 10px; line-height: 1.6; }
+.login-time-toggle-error > button { flex-shrink: 0; padding: 0; border: 0; color: inherit; background: none; font: inherit; text-decoration: underline; cursor: pointer; }
+.login-time-toggle button:focus-visible { outline: 3px solid #79b99a; outline-offset: 3px; border-radius: 6px; }
+.login-page { padding-bottom: 110px; }
+@media (prefers-reduced-motion: reduce) { .login-time-toggle * { transition: none !important; } }

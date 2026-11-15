@@ -13,6 +13,8 @@ test('PostgreSQL 바인딩은 SQL 리터럴 안의 물음표를 바꾸지 않는
 test('실제 PostgreSQL: 마이그레이션, 로그인, IP 출석, 신청과 세션', {
   skip: !process.env.POSTGRES_TEST_URL && 'POSTGRES_TEST_URL에 로컬 테스트 PostgreSQL 주소를 지정하세요.',
 }, async (t) => {
+  const testDate = require('../src/lib/validation').todayInSeoul();
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(`${testDate}T03:45:00Z`) });
   const source = new URL(process.env.POSTGRES_TEST_URL);
   assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(source.hostname), '통합 테스트는 로컬 PostgreSQL에서만 실행합니다.');
   const database = `mentos_test_${randomBytes(8).toString('hex')}`;
@@ -83,6 +85,75 @@ test('실제 PostgreSQL: 마이그레이션, 로그인, IP 출석, 신청과 세
       const cookie = student.headers.get('set-cookie').split(';')[0];
       assert.equal((await request('/api/auth/me', { cookie })).body.id, 'student');
       assert.ok(!JSON.stringify(student.body).includes(hash));
+    });
+
+    await t.test('운영 시간 외 입장 토글로 실제 학생 로그인은 허용하고 출석 시간은 보호한다', async () => {
+      const originalFlag = process.env.ENABLE_ATTENDANCE_TIME_TOGGLE;
+      const originalMode = process.env.NODE_ENV;
+      try {
+        process.env.ENABLE_ATTENDANCE_TIME_TOGGLE = 'true';
+        process.env.NODE_ENV = 'production';
+        t.mock.timers.setTime(Date.parse(`${testDate}T05:05:00Z`));
+        assert.equal((await login('student')).body.code, 'ATTENDANCE_TIME_CLOSED');
+        const opened = await request('/api/attendance/preview', { method: 'PATCH', body: { enabled: true } });
+        assert.equal(opened.status, 200);
+        const previewCookie = opened.headers.get('set-cookie').split(';')[0];
+        const signIn = await request('/api/auth/login', { method: 'POST', cookie: previewCookie, body: { id: 'student', password } });
+        assert.equal(signIn.status, 200);
+        const sessionCookie = signIn.headers.get('set-cookie').split(';')[0];
+        const cookies = `${previewCookie}; ${sessionCookie}`;
+        assert.equal((await request('/api/auth/me', { cookie: cookies })).body.id, 'student');
+        assert.equal((await request('/api/attendance/schedule', { cookie: previewCookie })).body.allowed, true);
+        assert.equal((await request('/api/attendance/schedule')).body.allowed, false);
+        const wrongPassword = await request('/api/auth/login', { method: 'POST', cookie: previewCookie, body: { id: 'student', password: 'wrong' } });
+        assert.equal(wrongPassword.status, 401);
+        for (const [path, body] of [['/api/attendance', { period: 'LUNCH' }]]) {
+          const denied = await request(path, { method: 'POST', cookie: cookies, body });
+          assert.equal(denied.status, 403);
+          assert.equal(denied.body.code, 'ATTENDANCE_TIME_CLOSED');
+        }
+        const closed = await request('/api/attendance/preview', { method: 'PATCH', cookie: previewCookie, body: { enabled: false } });
+        assert.equal(closed.body.allowed, false);
+        assert.match(closed.headers.get('set-cookie'), /Max-Age=0/);
+        assert.equal((await request('/api/auth/logout', { method: 'POST', cookie: cookies })).status, 204);
+        t.mock.timers.setTime(Date.parse(`${testDate}T06:05:00Z`));
+        assert.equal((await request('/api/attendance/schedule', { cookie: previewCookie })).body.allowed, false);
+      } finally {
+        if (originalFlag === undefined) delete process.env.ENABLE_ATTENDANCE_TIME_TOGGLE; else process.env.ENABLE_ATTENDANCE_TIME_TOGGLE = originalFlag;
+        if (originalMode === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = originalMode;
+        t.mock.timers.setTime(Date.parse(`${testDate}T03:45:00Z`));
+      }
+    });
+
+    await t.test('서버리스 진입점은 첫 요청에서 DB를 준비하고 동시 세션 조회를 처리한다', () => {
+      const script = `
+        const assert = require('node:assert/strict');
+        const http = require('node:http');
+        const { once } = require('node:events');
+        const handler = require('./src/server');
+        const { pool } = require('./src/config/db');
+        assert.equal(typeof handler, 'function');
+        (async () => {
+          const server = http.createServer(handler);
+          server.listen(0, '127.0.0.1');
+          await once(server, 'listening');
+          const base = 'http://127.0.0.1:' + server.address().port;
+          try {
+            assert.equal((await fetch(base + '/health')).status, 200);
+            const login = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 'admin', password: ${JSON.stringify(password)} }) });
+            assert.equal(login.status, 200);
+            const headers = { Authorization: 'Bearer ' + (await login.json()).accessToken };
+            const reads = await Promise.all(Array.from({ length: 20 }, () => fetch(base + '/api/auth/me', { headers })));
+            assert.ok(reads.every(response => response.status === 200));
+            assert.equal((await fetch(base + '/api/auth/logout', { method: 'POST', headers })).status, 204);
+          } finally { await new Promise(resolve => server.close(resolve)); await pool.end(); }
+        })().catch(error => { console.error(error.message); process.exitCode = 1; });
+      `;
+      const run = spawnSync(process.execPath, ['-e', script], {
+        cwd: require('node:path').resolve(__dirname, '..'), encoding: 'utf8', timeout: 30000,
+        env: { ...process.env, VERCEL: '1', NODE_ENV: 'production' },
+      });
+      assert.equal(run.status, 0, run.stderr || run.error?.message);
     });
 
     await t.test('네트워크 확인 후 출석을 실제로 저장하고 중복·타인 제출을 거부한다', async () => {

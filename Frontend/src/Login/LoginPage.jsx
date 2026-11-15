@@ -5,16 +5,18 @@ import LoginInput from "./LoginInput";
 import { useState } from "react";
 
 import CheckLoginEmpty from "./CheckLoginEmpty";
+import AttendanceTimeToggle from "./AttendanceTimeToggle";
 const LoginPage = ({setMainId, setMainName, setMainRole}) => {
   const [Id,setId] = useState("")
   const [Password,setPassword] = useState("")
   const [Loading,setLoading] = useState(false)
+  const [previewUpdating, setPreviewUpdating] = useState(false);
   const nav = useNavigate()
 
 
   async function Login(e) {
     e.preventDefault();
-    if (Loading || !CheckLoginEmpty({Id,Password})) return;
+    if (Loading || previewUpdating || !CheckLoginEmpty({Id,Password})) return;
 
     setLoading(true);
     try {
@@ -43,7 +45,7 @@ const LoginPage = ({setMainId, setMainName, setMainRole}) => {
   }
 
   return (
-    <div className="h-screen flex justify-center items-center flex-col">
+    <div className="login-page min-h-dvh flex justify-center items-center flex-col">
       <form onSubmit={Login} className="flex justify-center items-center flex-col w-84 h-120 gap-8 p-10 rounded-2xl">
         <img
           src={schoolLogo}
@@ -59,20 +61,12 @@ const LoginPage = ({setMainId, setMainName, setMainRole}) => {
         <button // 제출버튼
           type="submit"
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold w-full h-11 rounded-[20px] cursor-pointer transition"
-          disabled={Loading}
+          disabled={Loading || previewUpdating}
         >
           {Loading ? "로그인 중..." : "로그인"}
         </button>
       </form>
-      <div> {/*페이지간 이동용 버튼 -> 곧 없앨거임*/}
-
-        <button onClick={()=>{nav("/main")}}>
-            메인페이지
-        </button>
-        <button onClick={()=>{nav("/admin")}}>
-          어드민페이지
-        </button>
-      </div>
+      <AttendanceTimeToggle onPendingChange={setPreviewUpdating}/>
     </div>
   );
 };

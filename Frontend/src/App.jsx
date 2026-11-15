@@ -2,6 +2,7 @@ import './App.css'
 import LoginPage from './Login/LoginPage'
 import MainPage from './MainPage'
 import AdminPage from './AdminPage';
+import StudentMainGate from './StudentMainGate';
 import { Routes,Route,Navigate } from "react-router-dom";
 import { useEffect, useState } from 'react';
 
@@ -37,7 +38,7 @@ function App() {
     <>
       <Routes>
         <Route path='/' element={<LoginPage setMainId={setMainId} setMainName={setMainName} setMainRole={setMainRole}/>}></Route>
-        <Route path='/main' element={MainId ? <MainPage day={day} Id={MainId} Name={MainName}/> : <Navigate to="/" replace/>}></Route>
+        <Route path='/main' element={MainRole === "ADMIN" ? <Navigate to="/admin" replace/> : MainId ? <StudentMainGate><MainPage day={day} Id={MainId} Name={MainName}/></StudentMainGate> : <Navigate to="/" replace/>}></Route>
         <Route path='/admin' element={MainRole === "ADMIN" ? <AdminPage/> : <Navigate to="/" replace/>}></Route>
       </Routes>
     </>

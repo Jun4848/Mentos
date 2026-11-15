@@ -4,6 +4,7 @@ const { verifyPassword } = require('../lib/password');
 const { HttpError } = require('../lib/http');
 const { text } = require('../lib/validation');
 const { hashToken, setSessionCookie } = require('../middleware/auth');
+const { getRequestStudentAccess } = require('../lib/attendancePreview');
 
 async function login(req, res) {
   const id = text(req.body?.id, '아이디', 50);
@@ -17,6 +18,13 @@ async function login(req, res) {
   const account = accounts[0];
   if (!await verifyPassword(password, account?.password_hash)) {
     throw new HttpError(401, '아이디 또는 비밀번호가 올바르지 않습니다.');
+  }
+  if (account.role === 'STUDENT') {
+    const access = getRequestStudentAccess(req);
+    if (!access.allowed) {
+      res.set('Cache-Control', 'no-store');
+      return res.status(403).json({ ...access, code: 'ATTENDANCE_TIME_CLOSED' });
+    }
   }
   const accessToken = randomBytes(32).toString('hex');
   const hours = Number(process.env.SESSION_HOURS || 24);

@@ -8,6 +8,8 @@ const { asyncHandler } = require('../lib/http');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { loginLimit } = require('../middleware/loginLimit');
 const { networkStatus, requireAttendanceNetwork } = require('../middleware/attendanceNetwork');
+const { attendanceSchedule, requireAttendanceTime } = require('../middleware/attendanceTime');
+const { setAttendancePreview } = require('../lib/attendancePreview');
 const router = express.Router();
 
 router.get('/', getHome);
@@ -16,12 +18,14 @@ router.get('/health', asyncHandler(async (req, res) => {
   res.json({ status: 'ok', database: 'connected' });
 }));
 router.post('/api/auth/login', loginLimit, asyncHandler(auth.login));
+router.get('/api/attendance/schedule', attendanceSchedule);
+router.patch('/api/attendance/preview', setAttendancePreview);
 router.use('/api', requireAuth);
 router.get('/api/auth/me', auth.me);
 router.post('/api/auth/logout', asyncHandler(auth.logout));
 router.get('/api/attendance/network', networkStatus);
 router.get('/api/attendance', asyncHandler(attendance.list));
-router.post('/api/attendance', requireRole('STUDENT'), requireAttendanceNetwork, asyncHandler(attendance.checkIn));
+router.post('/api/attendance', requireRole('STUDENT'), requireAttendanceTime, requireAttendanceNetwork, asyncHandler(attendance.checkIn));
 router.put('/api/attendance', requireRole('ADMIN'), asyncHandler(attendance.record));
 router.get('/api/leaves', asyncHandler(leaves.list));
 router.post('/api/leaves', requireRole('STUDENT'), asyncHandler(leaves.create));

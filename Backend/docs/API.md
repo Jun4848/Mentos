@@ -134,3 +134,10 @@
 | 413 | JSON 본문 16KB 초과 |
 | 429 | 로그인 IP 제한: 15분에 20회 초과 |
 | 500 | 서버/DB 오류 |
+
+
+## 시간 외 입장
+
+로그인 화면 우측 하단의 작은 `시간 외 입장` 토글은 `ENABLE_ATTENDANCE_TIME_TOGGLE=true`일 때 표시됩니다. 켜면 해당 브라우저에서 최대 한 시간 동안 시간 외 학생 로그인과 메인페이지 입장을 허용합니다. 끄거나 만료되면 원래 시간표로 돌아갑니다. 운영의 실제 출석 제출은 한국 시간 12:30–14:00, 18:00–19:30과 네트워크 제한을 유지합니다.
+
+`GET /api/attendance/schedule`은 `previewAvailable`, `previewEnabled`, `previewExpiresAt`, `allowed`를 반환합니다. `PATCH /api/attendance/preview`에 `{"enabled":true|false}`를 보내 설정·해제합니다. 쿠키는 HttpOnly·SameSite=Lax이며 HTTPS에서 Secure를 적용합니다. 잘못된 입력은 400, 기능 비활성화 또는 미허용 요청 출처는 403입니다. 인증과 학생 권한은 기존대로 검사합니다.

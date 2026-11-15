@@ -80,6 +80,7 @@ test('Vercel에서는 마지막 전달 IP를 사용하고 다른 환경에서는
 });
 
 test('HTTP: 네트워크 확인과 출석 저장에 동일한 IP 제한을 적용한다', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-11T03:45:00Z') });
   const studentToken = 'a'.repeat(64);
   const adminToken = 'b'.repeat(64);
   const inserts = [];

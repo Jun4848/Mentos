@@ -28,6 +28,8 @@ const app = require('../src/app');
 const password = 'integration-password!';
 
 test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한과 영속성', async (t) => {
+  const testDate = require('../src/lib/validation').todayInSeoul();
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(`${testDate}T03:45:00Z`) });
   let adminConnection;
   let server;
   let base;
