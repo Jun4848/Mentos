@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { hashPassword, verifyPassword } = require('../src/lib/password');
 const { dateOnly, timestamp, oneOf, positiveId } = require('../src/lib/validation');
+const { getCheckResetTimes } = require('../src/lib/dormitory');
 
 test('비밀번호는 서로 다른 salt로 해시되고 기존 salt:hash 형식과 호환된다', async () => {
   const password = 'unit-test-password!';
@@ -32,4 +33,22 @@ test('SQL 조각, 잘못된 enum과 신청 번호를 거부한다', () => {
     assert.throws(() => positiveId(value), { status: 400 });
   }
   assert.throws(() => oneOf('ADMIN', ['OUTING', 'HOME_VISIT'], '유형'), { status: 400 });
+});
+
+test('체크 만료는 저녁 시작 10분 전 17:50과 밤 22:30이다', () => {
+  for (const [time, next, previous] of [
+    ['03:30:00', '08:50:00', '2026-11-10T13:30:00Z'],
+    ['08:49:59', '08:50:00', '2026-11-10T13:30:00Z'],
+    ['08:50:00', '13:30:00', '2026-11-11T08:50:00Z'],
+    ['09:00:00', '13:30:00', '2026-11-11T08:50:00Z'],
+    ['13:29:59', '13:30:00', '2026-11-11T08:50:00Z'],
+  ]) {
+    const result = getCheckResetTimes(new Date(`2026-11-11T${time}Z`));
+    assert.equal(result.next.toISOString(), `2026-11-11T${next}.000Z`);
+    assert.equal(result.previous.getTime(), Date.parse(previous));
+  }
+  const afterEvening = getCheckResetTimes(new Date('2026-11-11T13:30:00Z'));
+  assert.equal(afterEvening.next.toISOString(), '2026-11-12T08:50:00.000Z');
+  assert.equal(afterEvening.previous.toISOString(), '2026-11-11T13:30:00.000Z');
+  assert.equal(getCheckResetTimes(new Date('2026-12-31T15:00:00Z')).next.toISOString(), '2027-01-01T08:50:00.000Z');
 });

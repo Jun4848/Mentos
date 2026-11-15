@@ -141,3 +141,7 @@
 로그인 화면 우측 하단의 작은 `시간 외 입장` 토글은 `ENABLE_ATTENDANCE_TIME_TOGGLE=true`일 때 표시됩니다. 켜면 해당 브라우저에서 최대 한 시간 동안 시간 외 학생 로그인과 메인페이지 입장을 허용합니다. 끄거나 만료되면 원래 시간표로 돌아갑니다. 운영의 실제 출석 제출은 한국 시간 12:30–14:00, 18:00–19:30과 네트워크 제한을 유지합니다.
 
 `GET /api/attendance/schedule`은 `previewAvailable`, `previewEnabled`, `previewExpiresAt`, `allowed`를 반환합니다. `PATCH /api/attendance/preview`에 `{"enabled":true|false}`를 보내 설정·해제합니다. 쿠키는 HttpOnly·SameSite=Lax이며 HTTPS에서 Secure를 적용합니다. 잘못된 입력은 400, 기능 비활성화 또는 미허용 요청 출처는 403입니다. 인증과 학생 권한은 기존대로 검사합니다.
+
+### 출석 체크 초기화 시간표
+
+한국 시간으로 점심 체크는 **17:50**, 저녁 체크는 **22:30**에 초기화합니다. 시간표·관리자 명단 API의 `periods[].resetAt`에 이 시각을 반환합니다. 로그인·실제 체크 가능 시간은 기존대로 유지합니다. 운영에서는 Supabase Cron이 만료된 학생의 `is_checked`·`checked_until`만 초기화합니다.
