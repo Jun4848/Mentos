@@ -23,12 +23,13 @@ const { migrate } = require('../src/database/migrate');
 const { hashPassword } = require('../src/lib/password');
 const { hashToken } = require('../src/middleware/auth');
 const { todayInSeoul } = require('../src/lib/validation');
+const { expireAccountChecks } = require('../src/lib/accountChecks');
 const app = require('../src/app');
 
 const password = 'integration-password!';
 
 test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한과 영속성', async (t) => {
-  const testDate = require('../src/lib/validation').todayInSeoul();
+  const testDate = todayInSeoul();
   t.mock.timers.enable({ apis: ['Date'], now: new Date(`${testDate}T03:45:00Z`) });
   let adminConnection;
   let server;
@@ -57,7 +58,7 @@ test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한�
         await migrate(freshPool);
         await migrate(freshPool);
         const [[count]] = await freshPool.query('SELECT COUNT(*) AS n FROM schema_migrations');
-        assert.equal(count.n, 2);
+        assert.equal(count.n, 5);
         const [tables] = await freshPool.query('SHOW TABLES');
         assert.equal(tables.length, 5);
       } finally { await freshPool.end(); }
@@ -94,7 +95,44 @@ test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한�
         const [[saved]] = await freshPool.query("SELECT status FROM user_accounts WHERE id = 'existing-student'");
         assert.equal(saved.status, '잔류');
         const [[count]] = await freshPool.query('SELECT COUNT(*) AS n FROM schema_migrations');
-        assert.equal(count.n, 2);
+        assert.equal(count.n, 5);
+      } finally { await freshPool.end(); }
+    });
+
+    await t.test('기존 계정에 boolean 체크 상태를 추가하고 재실행 시 true를 보존한다', async () => {
+      const freshPool = mysql.createPool({ ...config, database: freshDatabase });
+      try {
+        await freshPool.query('ALTER TABLE user_accounts DROP CHECK chk_user_accounts_is_checked, DROP COLUMN is_checked');
+        await freshPool.execute('DELETE FROM schema_migrations WHERE version = ?', ['003_account_checked']);
+        await migrate(freshPool);
+        const [[account]] = await freshPool.query("SELECT name, room_number, status, is_checked FROM user_accounts WHERE id = 'existing-student'");
+        assert.deepEqual(account, { name: '기존학생', room_number: '401', status: '잔류', is_checked: 0 });
+        await assert.rejects(freshPool.query("UPDATE user_accounts SET is_checked = NULL WHERE id = 'existing-student'"), { code: 'ER_BAD_NULL_ERROR' });
+        await assert.rejects(freshPool.query("UPDATE user_accounts SET is_checked = 2 WHERE id = 'existing-student'"), { code: 'ER_CHECK_CONSTRAINT_VIOLATED' });
+        await freshPool.query("UPDATE user_accounts SET is_checked = TRUE WHERE id = 'existing-student'");
+        await freshPool.execute('DELETE FROM schema_migrations WHERE version = ?', ['003_account_checked']);
+        await migrate(freshPool);
+        await migrate(freshPool);
+        const [[saved]] = await freshPool.query("SELECT is_checked FROM user_accounts WHERE id = 'existing-student'");
+        assert.equal(saved.is_checked, 1);
+      } finally { await freshPool.end(); }
+    });
+
+    await t.test('기존 체크의 만료 시각을 보존하며 만료 컬럼 마이그레이션을 반복 실행한다', async () => {
+      const freshPool = mysql.createPool({ ...config, database: freshDatabase });
+      try {
+        await freshPool.query('ALTER TABLE user_accounts DROP INDEX idx_account_check_expiry, DROP COLUMN checked_until');
+        await freshPool.execute('DELETE FROM schema_migrations WHERE version = ?', ['004_check_expiry']);
+        await freshPool.query("UPDATE user_accounts SET is_checked = TRUE, updated_at = '2030-11-11 04:00:00' WHERE id = 'existing-student'");
+        await migrate(freshPool);
+        await migrate(freshPool);
+        const [[saved]] = await freshPool.query("SELECT is_checked, checked_until FROM user_accounts WHERE id = 'existing-student'");
+        assert.equal(saved.is_checked, 1);
+        assert.equal(saved.checked_until.toISOString(), '2030-11-11T08:50:00.000Z');
+        assert.equal(await expireAccountChecks(freshPool, new Date('2030-11-11T05:59:59Z')), 0);
+        assert.equal(await expireAccountChecks(freshPool, new Date('2030-11-11T08:50:00Z')), 1);
+        const [[expired]] = await freshPool.query("SELECT is_checked, checked_until, status, name FROM user_accounts WHERE id = 'existing-student'");
+        assert.deepEqual(expired, { is_checked: 0, checked_until: null, status: '잔류', name: '기존학생' });
       } finally { await freshPool.end(); }
     });
 
@@ -163,6 +201,7 @@ test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한�
       assert.equal(student.body.roomNumber, '301');
       assert.equal(student.body.role, 'STUDENT');
       assert.equal(student.body.status, '잔류');
+      assert.equal(student.body.isChecked, false);
       assert.equal(other.body.status, '귀가');
       assert.equal(admin.body.status, '');
       assert.ok(!JSON.stringify(student.body).includes('password'));
@@ -173,6 +212,7 @@ test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한�
       const restored = await request('/api/auth/me', { headers: { Cookie: cookie.split(';')[0] } });
       assert.equal(restored.status, 200);
       assert.equal(restored.body.status, student.body.status);
+      assert.equal(restored.body.isChecked, false);
       const [[session]] = await pool.execute('SELECT token_hash FROM login_sessions WHERE account_id = ?', ['student1']);
       assert.equal(session.token_hash, hashToken(student.body.accessToken));
       assert.notEqual(session.token_hash, student.body.accessToken);
@@ -185,16 +225,147 @@ test('실제 MySQL: 마이그레이션, 로그인, 출결, 외출/귀가 권한�
       assert.equal((await request('/api/auth/me', { token: student.body.accessToken, headers: { Origin: 'https://untrusted.example' } })).status, 403);
     });
 
+    await t.test('학생 로그인과 기존 세션의 체크는 시간 밖에서 차단하고 관리자는 허용한다', async () => {
+      const [[before]] = await pool.query('SELECT COUNT(*) AS count FROM login_sessions');
+      try {
+        t.mock.timers.setTime(Date.parse(`${testDate}T05:00:00Z`));
+        const denied = await login('student1');
+        assert.equal(denied.status, 403);
+        assert.equal(denied.body.code, 'ATTENDANCE_TIME_CLOSED');
+        assert.match(denied.body.message, /12:30~14:00.*18:00~19:30/);
+        assert.equal(denied.headers.get('set-cookie'), null);
+        assert.equal(denied.body.accessToken, undefined);
+        const [[after]] = await pool.query('SELECT COUNT(*) AS count FROM login_sessions');
+        assert.equal(after.count, before.count);
+        assert.equal((await login('student1', 'wrong')).status, 401);
+        for (const path of ['/api/attendance/check', '/api/attendance']) {
+          const result = await request(path, { method: 'POST', token: student.body.accessToken, body: { period: 'LUNCH' } });
+          assert.equal(result.status, 403);
+          assert.equal(result.body.code, 'ATTENDANCE_TIME_CLOSED');
+        }
+        const [[account]] = await pool.query("SELECT is_checked FROM user_accounts WHERE id = 'student1'");
+        assert.equal(account.is_checked, 0);
+        assert.equal((await request('/api/admin/dormitory', { token: admin.body.accessToken })).status, 200);
+        assert.equal((await login('admin')).status, 200);
+        t.mock.timers.setTime(Date.parse(`${testDate}T09:00:00Z`));
+        assert.equal((await login('student2')).status, 200);
+        t.mock.timers.setTime(Date.parse(`${testDate}T10:30:00Z`));
+        assert.equal((await login('student2')).status, 403);
+      } finally { t.mock.timers.setTime(Date.parse(`${testDate}T03:45:00Z`)); }
+    });
+
+    await t.test('시간 토글을 켠 브라우저만 학생 로그인·체크가 가능하며 나머지 조건은 유지한다', async () => {
+      const originalFlag = process.env.ENABLE_ATTENDANCE_TIME_TOGGLE;
+      const originalMode = process.env.NODE_ENV;
+      try {
+        process.env.ENABLE_ATTENDANCE_TIME_TOGGLE = 'true';
+        process.env.NODE_ENV = 'development';
+        t.mock.timers.setTime(Date.parse(`${testDate}T05:05:00Z`));
+        assert.equal((await login('student1')).status, 403);
+        const opened = await request('/api/attendance/preview', { method: 'PATCH', body: { enabled: true } });
+        assert.equal(opened.status, 200);
+        const headers = { Cookie: opened.headers.get('set-cookie').split(';')[0] };
+        const allowedLogin = await request('/api/auth/login', { method: 'POST', headers, body: { id: 'student1', password } });
+        assert.equal(allowedLogin.status, 200);
+        assert.equal((await request('/api/auth/login', { method: 'POST', headers, body: { id: 'student1', password: 'wrong' } })).status, 401);
+        assert.equal((await request('/api/attendance/check', { method: 'POST', headers })).status, 401);
+        const token = allowedLogin.body.accessToken;
+        assert.equal((await request('/api/attendance/check', { method: 'POST', headers, token: other.body.accessToken })).body.message, '귀가입니다');
+        assert.equal((await request('/api/attendance/check', { method: 'POST', headers, token })).status, 200);
+        assert.equal((await request('/api/attendance/check', { method: 'POST', headers, token })).status, 409);
+        assert.equal((await request('/api/attendance/check', { method: 'POST', token })).body.code, 'ATTENDANCE_TIME_CLOSED');
+        assert.equal((await login('student1')).status, 403);
+      } finally {
+        await pool.query("UPDATE user_accounts SET is_checked = FALSE, checked_until = NULL WHERE id = 'student1'");
+        await pool.execute("DELETE FROM attendance_records WHERE student_id = ? AND attendance_date = ?", ['student1', testDate]);
+        if (originalFlag === undefined) delete process.env.ENABLE_ATTENDANCE_TIME_TOGGLE; else process.env.ENABLE_ATTENDANCE_TIME_TOGGLE = originalFlag;
+        if (originalMode === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = originalMode;
+        t.mock.timers.setTime(Date.parse(`${testDate}T03:45:00Z`));
+      }
+    });
+
+    await t.test('관리자 호실 표에 학생만 나오고 DB에 추가한 학생을 바로 조회한다', async () => {
+      const path = '/api/admin/dormitory';
+      assert.equal((await request(path)).status, 401);
+      assert.equal((await request(path, { token: student.body.accessToken })).status, 403);
+      const cookie = admin.headers.get('set-cookie').split(';')[0];
+      const initial = await request(path, { headers: { Cookie: cookie } });
+      assert.equal(initial.status, 200);
+      assert.equal(initial.body.summary.total, 3);
+      assert.ok(initial.body.floors.every(floor => floor.rooms.length === 15));
+      assert.equal(initial.body.floors.flatMap(floor => floor.rooms.flatMap(room => room.students)).some(account => account.id === 'admin'), false);
+      assert.ok(!JSON.stringify(initial.body).includes('password_hash'));
+      try {
+        await pool.execute('INSERT INTO user_accounts (id, name, room_number, password_hash, status, is_checked) VALUES (?, ?, ?, ?, ?, TRUE)',
+          ['roster-new', '새학생', '201', await hashPassword(password), '귀가']);
+        const next = await request(path, { token: admin.body.accessToken });
+        assert.equal(next.body.summary.total, 4);
+        const added = next.body.floors[0].rooms[0].students[0];
+        assert.equal(added.id, 'roster-new');
+        assert.equal(added.isChecked, true);
+        assert.equal(added.attendanceStatus, 'HOME');
+        assert.equal(next.body.periods[0].start, '12:30');
+        assert.equal(next.body.periods[1].end, '19:30');
+      } finally { await pool.execute('DELETE FROM user_accounts WHERE id = ?', ['roster-new']); }
+    });
+
+    await t.test('잔류는 체크할 수 있고 귀가·중복 요청은 차단한다', async () => {
+      const path = '/api/attendance/check';
+      assert.equal((await request(path, { method: 'POST' })).status, 401);
+      assert.equal((await request(path, { method: 'POST', token: admin.body.accessToken })).status, 403);
+      const blocked = await request(path, { method: 'POST', token: other.body.accessToken });
+      assert.equal(blocked.status, 403);
+      assert.equal(blocked.body.message, '귀가입니다');
+      assert.equal((await request(path, { method: 'POST', token: student.body.accessToken, body: { studentId: 'student2' } })).status, 400);
+      assert.equal((await request(path, { method: 'POST', token: student.body.accessToken, body: { isChecked: false } })).status, 400);
+      const results = await Promise.all([1, 2].map(() => request(path, { method: 'POST', token: student.body.accessToken })));
+      assert.deepEqual(results.map(result => result.status).sort(), [200, 409]);
+      assert.equal(results.find(result => result.status === 200).body.isChecked, true);
+      const [accounts] = await pool.query('SELECT id, is_checked FROM user_accounts WHERE id IN (\'student1\', \'student2\', \'admin\') ORDER BY id');
+      assert.deepEqual(accounts.map(account => [account.id, account.is_checked]), [['admin', 0], ['student1', 1], ['student2', 0]]);
+      assert.equal((await request('/api/auth/me', { token: student.body.accessToken })).body.isChecked, true);
+      assert.equal((await login('student1')).body.isChecked, true);
+      const cookie = student.headers.get('set-cookie').split(';')[0];
+      assert.equal((await request(path, { method: 'POST', headers: { Cookie: cookie } })).status, 409);
+    });
+
+    await t.test('점심·저녁 체크는 17:50·22:30까지 유지하고 만료 후 다음 식사에 다시 체크한다', async () => {
+      const token = student.body.accessToken;
+      try {
+        const [[lunch]] = await pool.query("SELECT checked_until FROM user_accounts WHERE id = 'student1'");
+        assert.equal(lunch.checked_until.toISOString(), `${testDate}T08:50:00.000Z`);
+        t.mock.timers.setTime(Date.parse(`${testDate}T08:49:59Z`));
+        assert.equal((await request('/api/auth/me', { token })).body.isChecked, true);
+        let roster = await request('/api/admin/dormitory', { token: admin.body.accessToken });
+        assert.equal(roster.body.summary.checked, 1);
+        t.mock.timers.setTime(Date.parse(`${testDate}T08:50:00Z`));
+        assert.equal((await request('/api/auth/me', { token })).body.isChecked, false);
+        roster = await request('/api/admin/dormitory', { token: admin.body.accessToken });
+        assert.equal(roster.body.summary.checked, 0);
+        assert.equal(roster.body.summary.home, 1);
+        t.mock.timers.setTime(Date.parse(`${testDate}T09:00:00Z`));
+        assert.equal((await request('/api/attendance/check', { method: 'POST', token })).status, 200);
+        const [[evening]] = await pool.query("SELECT checked_until FROM user_accounts WHERE id = 'student1'");
+        assert.equal(evening.checked_until.toISOString(), `${testDate}T13:30:00.000Z`);
+        t.mock.timers.setTime(Date.parse(`${testDate}T13:29:59Z`));
+        assert.equal((await request('/api/auth/me', { token })).body.isChecked, true);
+        t.mock.timers.setTime(Date.parse(`${testDate}T13:30:00Z`));
+        assert.equal((await request('/api/auth/me', { token })).body.isChecked, false);
+        const [[saved]] = await pool.query("SELECT is_checked, checked_until FROM user_accounts WHERE id = 'student1'");
+        assert.deepEqual(saved, { is_checked: 0, checked_until: null });
+      } finally { t.mock.timers.setTime(Date.parse(`${testDate}T03:45:00Z`)); }
+    });
+
     await t.test('학생은 오늘 본인의 출석만 제출하고 같은 시간대 중복은 거부한다', async () => {
       const token = student.body.accessToken;
-      const first = await request('/api/attendance', { method: 'POST', token, body: { period: 'LUNCH' } });
+      const first = await request('/api/attendance', { method: 'POST', token, body: { period: 'MORNING' } });
       assert.equal(first.status, 201);
       assert.equal(first.body.date, todayInSeoul());
-      assert.equal((await request('/api/attendance', { method: 'POST', token, body: { period: 'LUNCH' } })).status, 409);
+      assert.equal((await request('/api/attendance', { method: 'POST', token, body: { period: 'MORNING' } })).status, 409);
       assert.equal((await request('/api/attendance', { method: 'POST', token, body: { period: 'EVENING', status: 'EXCUSED', studentId: 'student2' } })).status, 400);
       assert.equal((await request('/api/attendance?studentId=student2', { token })).status, 403);
       assert.equal((await request('/api/attendance', { token: other.body.accessToken })).body.records.length, 0);
-      const records = (await request('/api/attendance', { token })).body.records;
+      const records = (await request('/api/attendance?period=MORNING', { token })).body.records;
       assert.equal(records.length, 1);
       assert.equal(records[0].roomNumber, '301');
     });

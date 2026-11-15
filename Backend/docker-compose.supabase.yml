@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "${PORT:-3000}:3000"
+      - "${BACKEND_BIND_IP:-0.0.0.0}:${PORT:-3000}:3000"
     env_file:
       - .env
     environment:

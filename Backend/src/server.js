@@ -3,6 +3,7 @@ require('dotenv').config();
 const app = require('./app');
 const { checkDatabaseConnection, pool } = require('./config/db');
 const { migrate } = require('./database/migrate');
+const { expireAccountChecks, startCheckExpiryTimer } = require('./lib/accountChecks');
 
 const PORT = Number(process.env.PORT) || 3000;
 const DB_RETRY_ATTEMPTS = 5;
@@ -36,6 +37,7 @@ function ensureDatabaseReady() {
     databaseReady = (async () => {
       await connectToDatabaseWithRetry();
       await migrate();
+      await expireAccountChecks();
       console.log('Database connection successful');
     })().catch(error => {
       databaseReady = undefined;
@@ -70,11 +72,13 @@ async function startServer() {
     return;
   }
 
+  const stopCheckExpiryTimer = startCheckExpiryTimer();
   const server = app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
   });
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, () => {
+      stopCheckExpiryTimer();
       server.close(() => pool.end().then(() => { process.exitCode = 0; }));
     });
   }

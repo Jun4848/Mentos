@@ -85,6 +85,7 @@ test('HTTP: 네트워크 확인과 출석 저장에 동일한 IP 제한을 적�
   const adminToken = 'b'.repeat(64);
   const inserts = [];
   t.mock.method(pool, 'execute', async (sql, values) => {
+    if (sql.startsWith('UPDATE user_accounts SET is_checked = FALSE, checked_until = NULL')) return [{ affectedRows: 0 }];
     if (sql.includes('FROM login_sessions s JOIN user_accounts')) {
       const role = values[0] === hashToken(studentToken) ? 'STUDENT'
         : values[0] === hashToken(adminToken) ? 'ADMIN' : null;
@@ -103,12 +104,13 @@ test('HTTP: 네트워크 확인과 출석 저장에 동일한 IP 제한을 적�
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  async function request(path, { token = studentToken, ip, method = 'GET', body } = {}) {
+  async function request(path, { token = studentToken, ip, cookie, method = 'GET', body } = {}) {
     const response = await fetch(`${base}${path}`, {
       method,
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(ip ? { 'X-Forwarded-For': ip } : {}),
+        ...(cookie ? { Cookie: cookie } : {}),
         ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
@@ -116,6 +118,77 @@ test('HTTP: 네트워크 확인과 출석 저장에 동일한 IP 제한을 적�
     return { status: response.status, headers: response.headers, body: await response.json() };
   }
   try {
+    await t.test('시간 외 입장은 브라우저별로 만료·해제하고 운영 출석 시간표는 유지한다', async () => {
+      const originalFlag = process.env.ENABLE_ATTENDANCE_TIME_TOGGLE;
+      const originalMode = process.env.NODE_ENV;
+      try {
+        process.env.ENABLE_ATTENDANCE_TIME_TOGGLE = 'true';
+        process.env.NODE_ENV = 'development';
+        t.mock.timers.setTime(Date.parse('2026-11-11T05:05:00Z'));
+        assert.equal((await request('/api/attendance/schedule', { token: null })).body.allowed, false);
+        assert.equal((await request('/api/attendance/preview', { token: null, method: 'PATCH', body: { enabled: 'true' } })).status, 400);
+        const opened = await request('/api/attendance/preview', { token: null, method: 'PATCH', body: { enabled: true } });
+        assert.equal(opened.status, 200);
+        assert.equal(opened.body.allowed, true);
+        assert.equal(opened.body.previewEnabled, true);
+        assert.match(opened.headers.get('set-cookie'), /HttpOnly/);
+        assert.match(opened.headers.get('set-cookie'), /Max-Age=3600/);
+        const cookie = opened.headers.get('set-cookie').split(';')[0];
+        assert.equal((await request('/api/attendance/schedule', { token: null, cookie })).body.previewEnabled, true);
+        assert.equal((await request('/api/attendance/schedule', { token: null })).body.previewEnabled, false);
+        // 시간만 허용하므로 인증과 와이파이는 기존대로 검사합니다.
+        assert.equal((await request('/api/attendance/check', { token: null, cookie, method: 'POST' })).status, 401);
+        const wifiDenied = await request('/api/attendance/check', { cookie, method: 'POST' });
+        assert.equal(wifiDenied.status, 403);
+        assert.equal(wifiDenied.body.allowed, false);
+        assert.notEqual(wifiDenied.body.code, 'ATTENDANCE_TIME_CLOSED');
+        const closed = await request('/api/attendance/preview', { token: null, cookie, method: 'PATCH', body: { enabled: false } });
+        assert.equal(closed.body.previewEnabled, false);
+        assert.equal(closed.body.allowed, false);
+        assert.match(closed.headers.get('set-cookie'), /Max-Age=0/);
+        t.mock.timers.setTime(Date.parse('2026-11-11T06:05:00Z'));
+        assert.equal((await request('/api/attendance/schedule', { token: null, cookie })).body.allowed, false);
+        process.env.NODE_ENV = 'production';
+        const productionOpened = await request('/api/attendance/preview', { token: null, method: 'PATCH', body: { enabled: true } });
+        assert.equal(productionOpened.status, 200);
+        assert.equal(productionOpened.body.previewAvailable, true);
+        const productionCookie = productionOpened.headers.get('set-cookie').split(';')[0];
+        assert.equal((await request('/api/attendance/schedule', { token: null, cookie: productionCookie })).body.allowed, true);
+        assert.equal((await request('/api/attendance/schedule', { token: null })).body.allowed, false);
+        for (const [path, body] of [['/api/attendance/check', undefined], ['/api/attendance', { period: 'LUNCH' }]]) {
+          const denied = await request(path, { cookie: productionCookie, method: 'POST', body });
+          assert.equal(denied.status, 403);
+          assert.equal(denied.body.code, 'ATTENDANCE_TIME_CLOSED');
+        }
+        assert.equal(inserts.length, 0);
+        process.env.ENABLE_ATTENDANCE_TIME_TOGGLE = 'false';
+        assert.equal((await request('/api/attendance/preview', { token: null, method: 'PATCH', body: { enabled: true } })).status, 403);
+        assert.equal((await request('/api/attendance/schedule', { token: null, cookie: productionCookie })).body.allowed, false);
+      } finally {
+        if (originalFlag === undefined) delete process.env.ENABLE_ATTENDANCE_TIME_TOGGLE; else process.env.ENABLE_ATTENDANCE_TIME_TOGGLE = originalFlag;
+        if (originalMode === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = originalMode;
+        t.mock.timers.setTime(Date.parse('2026-11-11T03:45:00Z'));
+      }
+    });
+
+    await t.test('공개 이용 시간 조회와 기존 세션의 시간 외 체크를 서버에서 차단한다', async () => {
+      t.mock.timers.setTime(Date.parse('2026-11-11T05:00:00Z'));
+      const schedule = await request('/api/attendance/schedule', { token: null });
+      assert.equal(schedule.status, 200);
+      assert.equal(schedule.body.allowed, false);
+      assert.equal(schedule.headers.get('cache-control'), 'no-store');
+      for (const [path, body] of [['/api/attendance/check', undefined], ['/api/attendance', { period: 'LUNCH' }]]) {
+        const denied = await request(path, { method: 'POST', ip: '192.0.2.10', body });
+        assert.equal(denied.status, 403);
+        assert.equal(denied.body.code, 'ATTENDANCE_TIME_CLOSED');
+        assert.match(denied.body.message, /12:30~14:00.*18:00~19:30/);
+      }
+      assert.equal(inserts.length, 0);
+      assert.equal((await request('/api/auth/me')).status, 200);
+      t.mock.timers.setTime(Date.parse('2026-11-11T03:45:00Z'));
+      assert.equal((await request('/api/attendance/schedule', { token: null })).body.allowed, true);
+    });
+
     await t.test('네트워크 조회에도 로그인이 필요하고 허용되지 않은 IP는 저장하지 않는다', async () => {
       assert.equal((await request('/api/attendance/network', { token: null })).status, 401);
       const result = await request('/api/attendance/network');
@@ -127,6 +200,9 @@ test('HTTP: 네트워크 확인과 출석 저장에 동일한 IP 제한을 적�
       const denied = await request('/api/attendance', { method: 'POST', body: { period: 'LUNCH' } });
       assert.equal(denied.status, 403);
       assert.equal(denied.body.allowed, false);
+      const deniedCheck = await request('/api/attendance/check', { method: 'POST' });
+      assert.equal(deniedCheck.status, 403);
+      assert.equal(deniedCheck.body.allowed, false);
       assert.equal(inserts.length, 0);
     });
 
@@ -176,6 +252,101 @@ test('HTTP: 네트워크 확인과 출석 저장에 동일한 IP 제한을 적�
         assert.equal((await request('/api/attendance/network', { ip })).body.allowed, true, ip);
       }
       assert.equal((await request('/api/attendance/network', { ip: '2001:db9::123' })).body.allowed, false);
+    });
+
+    await t.test('개발용 와이파이 토글은 조회와 체크에 함께 적용하고 브라우저·만료·운영 환경을 구분한다', async (subtest) => {
+      const originalFlag = process.env.ENABLE_ATTENDANCE_NETWORK_TOGGLE;
+      const originalMode = process.env.NODE_ENV;
+      const originalExecute = pool.execute;
+      let checks = 0;
+      subtest.mock.method(pool, 'execute', async (sql, values) => {
+        if (sql.startsWith('UPDATE user_accounts SET is_checked = TRUE')) {
+          checks++;
+          assert.equal(values[1], 'student');
+          return [{ affectedRows: 1 }];
+        }
+        return originalExecute(sql, values);
+      });
+      subtest.mock.method(pool, 'getConnection', async () => ({
+        beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release() {},
+        execute: (sql, values) => pool.execute(sql, values),
+      }));
+      const path = '/api/attendance/network/preview';
+      try {
+        process.env.ENABLE_ATTENDANCE_NETWORK_TOGGLE = 'true';
+        process.env.NODE_ENV = 'development';
+        assert.equal((await request(path, { token: null, method: 'PATCH', body: { allowed: true } })).status, 401);
+        assert.equal((await request(path, { token: adminToken, method: 'PATCH', body: { allowed: true } })).status, 403);
+        for (const body of [{}, { allowed: 'true' }, { allowed: true, ip: '192.0.2.10' }]) {
+          assert.equal((await request(path, { method: 'PATCH', body })).status, 400);
+        }
+        const connected = await request(path, { method: 'PATCH', body: { allowed: true } });
+        assert.equal(connected.status, 200);
+        assert.equal(connected.body.allowed, true);
+        assert.equal(connected.body.previewEnabled, true);
+        assert.match(connected.headers.get('set-cookie'), /HttpOnly/);
+        assert.match(connected.headers.get('set-cookie'), /SameSite=Lax/);
+        assert.match(connected.headers.get('set-cookie'), /Max-Age=3600/);
+        const connectedCookie = connected.headers.get('set-cookie').split(';')[0];
+        assert.equal((await request('/api/attendance/network', { cookie: connectedCookie })).body.allowed, true);
+        assert.equal((await request('/api/attendance/network')).body.allowed, false);
+        assert.equal((await request('/api/attendance/check', { cookie: connectedCookie, method: 'POST' })).status, 200);
+        assert.equal(checks, 1);
+        t.mock.timers.setTime(Date.parse('2026-11-11T05:05:00Z'));
+        assert.equal((await request('/api/attendance/check', { cookie: connectedCookie, method: 'POST' })).body.code, 'ATTENDANCE_TIME_CLOSED');
+        t.mock.timers.setTime(Date.parse('2026-11-11T03:45:00Z'));
+        const disconnected = await request(path, { method: 'PATCH', body: { allowed: false } });
+        const disconnectedCookie = disconnected.headers.get('set-cookie').split(';')[0];
+        assert.equal(disconnected.body.allowed, false);
+        assert.equal((await request('/api/attendance/network', { cookie: disconnectedCookie, ip: '192.0.2.10' })).body.allowed, false);
+        assert.equal((await request('/api/attendance/check', { cookie: disconnectedCookie, ip: '192.0.2.10', method: 'POST' })).status, 403);
+        assert.equal(checks, 1);
+        const reset = await request(path, { cookie: disconnectedCookie, ip: '192.0.2.10', method: 'PATCH', body: { allowed: null } });
+        assert.equal(reset.body.allowed, true);
+        assert.equal(reset.body.previewEnabled, false);
+        assert.match(reset.headers.get('set-cookie'), /Max-Age=0/);
+        for (const cookie of ['mentos_network_preview=invalid', `mentos_network_preview=1.${Date.now() + 7200000}`]) {
+          assert.equal((await request('/api/attendance/network', { cookie })).body.allowed, false);
+        }
+        t.mock.timers.setTime(Date.parse('2026-11-11T04:45:00Z'));
+        assert.equal((await request('/api/attendance/network', { cookie: connectedCookie })).body.previewEnabled, false);
+        t.mock.timers.setTime(Date.parse('2026-11-11T03:45:00Z'));
+        process.env.NODE_ENV = 'production';
+        assert.equal((await request(path, { method: 'PATCH', body: { allowed: true } })).status, 403);
+        assert.equal((await request('/api/attendance/network', { cookie: connectedCookie })).body.allowed, false);
+        assert.equal((await request('/api/attendance/network', { cookie: connectedCookie })).body.previewAvailable, false);
+        process.env.NODE_ENV = 'development';
+        process.env.ENABLE_ATTENDANCE_NETWORK_TOGGLE = 'false';
+        assert.equal((await request(path, { method: 'PATCH', body: { allowed: true } })).status, 403);
+        assert.equal((await request('/api/attendance/network', { cookie: connectedCookie })).body.allowed, false);
+      } finally {
+        if (originalFlag === undefined) delete process.env.ENABLE_ATTENDANCE_NETWORK_TOGGLE; else process.env.ENABLE_ATTENDANCE_NETWORK_TOGGLE = originalFlag;
+        if (originalMode === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = originalMode;
+        t.mock.timers.setTime(Date.parse('2026-11-11T03:45:00Z'));
+      }
+    });
+
+    await t.test('호실 조회는 관리자만 가능하고 학생 추가를 새 조회에 즉시 반영한다', async (subtest) => {
+      const students = [{ id: 'roster-student', name: '실제학생', roomNumber: '406', status: '잔류', isChecked: 0 }];
+      let reads = 0;
+      subtest.mock.method(pool, 'query', async sql => {
+        assert.match(sql, /WHERE role = 'STUDENT'/);
+        assert.ok(!sql.includes('password_hash'));
+        reads++;
+        return [students];
+      });
+      assert.equal((await request('/api/admin/dormitory', { token: null })).status, 401);
+      assert.equal((await request('/api/admin/dormitory')).status, 403);
+      assert.equal(reads, 0);
+      const first = await request('/api/admin/dormitory', { token: adminToken });
+      assert.equal(first.status, 200);
+      assert.equal(first.body.summary.total, 1);
+      assert.equal(first.body.floors[2].rooms[5].students[0].id, 'roster-student');
+      students.push({ id: 'new-student', name: '추가학생', roomNumber: '201', status: '귀가', isChecked: 1 });
+      const next = await request('/api/admin/dormitory', { token: adminToken });
+      assert.equal(next.body.summary.total, 2);
+      assert.equal(next.body.floors[0].rooms[0].students[0].attendanceStatus, 'HOME');
+      assert.equal(reads, 2);
     });
   } finally {
     app.set('trust proxy', originalTrust);

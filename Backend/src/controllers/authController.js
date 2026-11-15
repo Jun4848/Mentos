@@ -5,6 +5,7 @@ const { HttpError } = require('../lib/http');
 const { text } = require('../lib/validation');
 const { hashToken, setSessionCookie } = require('../middleware/auth');
 const { getRequestStudentAccess } = require('../lib/attendancePreview');
+const { expireAccountChecks } = require('../lib/accountChecks');
 
 async function login(req, res) {
   const id = text(req.body?.id, '아이디', 50);
@@ -12,8 +13,9 @@ async function login(req, res) {
   if (typeof password !== 'string' || !password || password.length > 128) {
     throw new HttpError(400, '아이디와 비밀번호를 확인해주세요.');
   }
+  await expireAccountChecks();
   const [accounts] = await pool.execute(
-    'SELECT id, name, room_number AS "roomNumber", password_hash, role, status FROM user_accounts WHERE id = ?', [id],
+    'SELECT id, name, room_number AS "roomNumber", password_hash, role, status, is_checked AS "isChecked" FROM user_accounts WHERE id = ?', [id],
   );
   const account = accounts[0];
   if (!await verifyPassword(password, account?.password_hash)) {
@@ -35,7 +37,7 @@ async function login(req, res) {
   await pool.execute('INSERT INTO login_sessions (token_hash, account_id, expires_at) VALUES (?, ?, ?)', [hashToken(accessToken), account.id, expiresAt]);
   setSessionCookie(res, accessToken, maxAge);
   res.set('Cache-Control', 'no-store');
-  res.json({ id: account.id, name: account.name, roomNumber: account.roomNumber, role: account.role, status: account.status, accessToken, expiresAt: expiresAt.toISOString() });
+  res.json({ id: account.id, name: account.name, roomNumber: account.roomNumber, role: account.role, status: account.status, isChecked: Boolean(account.isChecked), accessToken, expiresAt: expiresAt.toISOString() });
 }
 
 function me(req, res) {

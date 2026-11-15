@@ -10,7 +10,7 @@
     "start": "node src/server.js",
     "db:migrate": "node scripts/migrate.js",
     "account:create": "node scripts/create-account.js",
-    "test": "node --test test/unit.test.js test/network.test.js test/entry-access.test.js",
+    "test": "node --test test/unit.test.js test/network.test.js test/entry-access.test.js test/attendance-export.test.js",
     "test:integration": "node --test test/integration.test.js",
     "test:postgres": "node --test test/postgres.integration.test.js"
   },

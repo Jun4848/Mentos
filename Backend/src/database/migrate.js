@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pool, dialect } = require('../config/db');
+const { backfillCheckExpiry } = require('../lib/accountChecks');
 
 async function tableExists(connection, name) {
   const [rows] = await connection.execute(
@@ -23,6 +24,48 @@ async function migrateAccountStatus(connection) {
   console.log(`Database migration ${version} applied`);
 }
 
+async function migrateAccountChecked(connection) {
+  const version = '003_account_checked';
+  const [versions] = await connection.execute('SELECT version FROM schema_migrations WHERE version = ?', [version]);
+  if (versions.length) return;
+  const [columns] = await connection.query("SHOW COLUMNS FROM user_accounts LIKE 'is_checked'");
+  if (!columns.length) {
+    const sql = await fs.readFile(path.join(__dirname, '003_account_checked.sql'), 'utf8');
+    await connection.query(sql);
+  }
+  await connection.execute('INSERT INTO schema_migrations (version) VALUES (?)', [version]);
+  console.log(`Database migration ${version} applied`);
+}
+
+async function migrateCheckExpiry(connection) {
+  const version = '004_check_expiry';
+  const [versions] = await connection.execute('SELECT version FROM schema_migrations WHERE version = ?', [version]);
+  if (versions.length) return;
+  const [columns] = await connection.query("SHOW COLUMNS FROM user_accounts LIKE 'checked_until'");
+  if (!columns.length) {
+    const sql = await fs.readFile(path.join(__dirname, '004_check_expiry.sql'), 'utf8');
+    await connection.query(sql);
+  }
+  await backfillCheckExpiry(connection);
+  await connection.execute('INSERT INTO schema_migrations (version) VALUES (?)', [version]);
+  console.log(`Database migration ${version} applied`);
+}
+
+async function migrateAttendanceHistory(connection) {
+  const version = '005_attendance_history';
+  const [versions] = await connection.execute('SELECT version FROM schema_migrations WHERE version = ?', [version]);
+  if (versions.length) return;
+  const [columns] = await connection.query('SHOW COLUMNS FROM attendance_records');
+  for (const [name, length] of [['student_name', 100], ['room_number', 10]]) {
+    if (!columns.some(column => column.Field === name)) {
+      await connection.query(`ALTER TABLE attendance_records ADD COLUMN ${name} VARCHAR(${length}) NOT NULL DEFAULT ''`);
+    }
+  }
+  const sql = await fs.readFile(path.join(__dirname, '005_attendance_history.sql'), 'utf8');
+  await connection.query(sql);
+  await connection.execute('INSERT INTO schema_migrations (version) VALUES (?)', [version]);
+}
+
 async function migrate(database = pool) {
   if (dialect === 'postgres') return require('./postgres/migrate').migratePostgres(database);
   const connection = await database.getConnection();
@@ -38,6 +81,9 @@ async function migrate(database = pool) {
     const [versions] = await connection.execute('SELECT version FROM schema_migrations WHERE version = ?', ['001_initial']);
     if (versions.length) {
       await migrateAccountStatus(connection);
+      await migrateAccountChecked(connection);
+      await migrateCheckExpiry(connection);
+      await migrateAttendanceHistory(connection);
       return;
     }
     if (await tableExists(connection, 'users')) {
@@ -72,6 +118,9 @@ async function migrate(database = pool) {
     await connection.execute('INSERT INTO schema_migrations (version) VALUES (?)', ['001_initial']);
     console.log('Database migration 001_initial applied');
     await migrateAccountStatus(connection);
+    await migrateAccountChecked(connection);
+    await migrateCheckExpiry(connection);
+    await migrateAttendanceHistory(connection);
   } finally {
     if (locked) await connection.query("SELECT RELEASE_LOCK(CONCAT('mentos:', LEFT(DATABASE(), 50)))");
     connection.release();

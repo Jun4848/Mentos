@@ -1,6 +1,7 @@
 const { createHash } = require('node:crypto');
 const { pool, currentTimestamp } = require('../config/db');
 const { HttpError, asyncHandler } = require('../lib/http');
+const { expireAccountChecks } = require('../lib/accountChecks');
 
 const COOKIE_NAME = 'mentos_session';
 const hashToken = (token) => createHash('sha256').update(token).digest('hex');
@@ -16,13 +17,14 @@ function readToken(req) {
 const requireAuth = asyncHandler(async (req, res, next) => {
   const token = readToken(req);
   if (!token) throw new HttpError(401, '로그인이 필요합니다.');
+  await expireAccountChecks();
   const [accounts] = await pool.execute(`
-    SELECT a.id, a.name, a.room_number AS "roomNumber", a.role, a.status
+    SELECT a.id, a.name, a.room_number AS "roomNumber", a.role, a.status, a.is_checked AS "isChecked"
     FROM login_sessions s JOIN user_accounts a ON a.id = s.account_id
     WHERE s.token_hash = ? AND s.expires_at > ${currentTimestamp}
   `, [hashToken(token)]);
   if (!accounts.length) throw new HttpError(401, '세션이 만료되었습니다. 다시 로그인해주세요.');
-  req.account = accounts[0];
+  req.account = { ...accounts[0], isChecked: Boolean(accounts[0].isChecked) };
   req.sessionToken = token;
   res.set('Cache-Control', 'no-store');
   next();

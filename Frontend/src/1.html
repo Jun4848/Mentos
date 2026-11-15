@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>기숙사 출결 시스템 - 프로토타입</title>
+    <style>
+        :root {
+            --navy: #173f32;
+            --blue: #287653;
+            --bg: #f4f8f5;
+            --line: #dfe9e2;
+            --text: #203129;
+            --muted: #718078;
+            --green: #32845d;
+            --orange: #b7791f;
+            --purple: #63806e
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", "Malgun Gothic", sans-serif;
+            color: var(--text)
+        }
+
+        button,
+        input,
+        select {
+            font: inherit
+        }
+
+        button {
+            cursor: pointer
+        }
+
+        .topbar {
+            height: 68px;
+            background: white;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            position: sticky;
+            top: 0;
+            z-index: 5
+        }
+
+        .brand {
+            font-weight: 800;
+            font-size: 18px;
+            display: flex;
+            gap: 10px;
+            align-items: center
+        }
+
+        .brand-mark {
+            background: var(--blue);
+            color: white;
+            border-radius: 10px;
+            padding: 8px
+        }
+
+        .top-user {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            color: #43516a;
+            font-size: 14px
+        }
+
+        .logout {
+            border: 1px solid #d6deea;
+            background: white;
+            border-radius: 9px;
+            padding: 9px 12px;
+            color: #33445d
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            min-height: calc(100vh - 68px)
+        }
+
+        aside {
+            background: var(--navy);
+            padding: 22px 14px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            gap: 6px
+        }
+
+        .side-label {
+            font-size: 11px;
+            opacity: .55;
+            margin: 4px 12px 12px
+        }
+
+        .nav {
+            border: 0;
+            background: transparent;
+            color: #d5deec;
+            text-align: left;
+            padding: 13px 14px;
+            border-radius: 9px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            font-size: 14px
+        }
+
+        .nav.active {
+            background: var(--blue);
+            color: white;
+            font-weight: 700
+        }
+
+        .aside-bottom {
+            margin-top: auto;
+            border-top: 1px solid #40506a;
+            padding: 16px 8px 0;
+            font-size: 13px
+        }
+
+        .main {
+            padding: 28px;
+            max-width: 1600px;
+            width: 100%;
+            margin: 0 auto
+        }
+
+        .page-heading {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 22px
+        }
+
+        .page-heading h1 {
+            font-size: 25px;
+            margin: 0 0 7px
+        }
+
+        .page-heading p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px
+        }
+
+        .date {
+            border: 1px solid var(--line);
+            background: white;
+            padding: 10px 12px;
+            border-radius: 9px;
+            color: #43516a
+        }
+
+        .profile {
+            background: white;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 22px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px
+        }
+
+        .avatar {
+            width: 60px;
+            height: 60px;
+            background: #e4f2e8;
+            color: #287653;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            font-size: 27px
+        }
+
+        .profile h2 {
+            font-size: 20px;
+            margin: 0 0 6px
+        }
+
+        .profile p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 20px
+        }
+
+        .stat {
+            background: white;
+            border: 1px solid var(--line);
+            border-radius: 13px;
+            padding: 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0
+        }
+
+        .stat-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 11px;
+            display: grid;
+            place-items: center;
+            background: #e4f2e8;
+            color: var(--blue);
+            font-size: 21px;
+            flex-shrink: 0
+        }
+
+        .stat:nth-child(2) .stat-icon {
+            background: #e4f2e8;
+            color: var(--green)
+        }
+
+        .stat:nth-child(3) .stat-icon {
+            background: #fff2e5;
+            color: var(--orange)
+        }
+
+        .stat:nth-child(4) .stat-icon {
+            background: #edf3ee;
+            color: var(--purple)
+        }
+
+        .stat small {
+            display: block;
+            color: var(--muted);
+            margin-bottom: 5px
+        }
+
+        .stat strong {
+            font-size: 23px
+        }
+
+        .stat strong em {
+            font-style: normal;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--muted);
+            margin-left: 3px
+        }
+
+        .card {
+            background: white;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 21px;
+            margin-bottom: 20px
+        }
+
+        .card-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 17px
+        }
+
+        .card h2 {
+            font-size: 18px;
+            margin: 0
+        }
+
+        .filters {
+            display: flex;
+            gap: 9px;
+            flex-wrap: wrap;
+            margin-bottom: 14px
+        }
+
+        .filters input,
+        .filters select {
+            border: 1px solid var(--line);
+            background: white;
+            border-radius: 8px;
+            padding: 10px 11px;
+            color: #43516a;
+            min-width: 130px
+        }
+
+        .filters input {
+            flex: 1;
+            min-width: 180px
+        }
+
+        .table-wrap {
+            overflow-x: auto
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            white-space: nowrap;
+            font-size: 13px
+        }
+
+        th {
+            background: #f5f7fb;
+            color: #66748a;
+            font-weight: 600;
+            text-align: left;
+            padding: 13px 12px;
+            border-bottom: 1px solid var(--line)
+        }
+
+        td {
+            padding: 13px 12px;
+            border-bottom: 1px solid #edf0f5
+        }
+
+        tbody tr:hover {
+            background: #f9fbff
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700
+        }
+
+        .blue {
+            background: #e4f2e8;
+            color: #276bd1
+        }
+
+        .green {
+            background: #e4f2e8;
+            color: #20834d
+        }
+
+        .orange {
+            background: #fff0e1;
+            color: #c76c16
+        }
+
+        .gray {
+            background: #edf3ee;
+            color: #5f6d81
+        }
+
+        .purple {
+            background: #edf3ee;
+            color: #784ac0
+        }
+
+        .btn {
+            border: 0;
+            border-radius: 9px;
+            background: var(--blue);
+            color: white;
+            font-weight: 700;
+            padding: 11px 15px
+        }
+
+        .btn.secondary {
+            background: white;
+            border: 1px solid var(--line);
+            color: #44536b
+        }
+
+        .btn.small {
+            padding: 7px 10px;
+            font-size: 12px
+        }
+
+        .columns {
+            display: grid;
+            grid-template-columns: minmax(0, 1.6fr) minmax(270px, 1fr);
+            gap: 20px
+        }
+
+        .quick-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 9px
+        }
+
+        .quick-buttons button {
+            padding: 13px 10px;
+            border-radius: 9px;
+            border: 1px solid var(--line);
+            background: #f9fbff;
+            color: #33445d;
+            font-weight: 650
+        }
+
+        .quick-buttons button:hover {
+            border-color: var(--blue);
+            color: var(--blue)
+        }
+
+        .notice {
+            padding: 13px 0;
+            border-bottom: 1px solid #edf0f5;
+            font-size: 13px
+        }
+
+        .notice:last-child {
+            border-bottom: 0
+        }
+
+        .notice small {
+            display: block;
+            color: #8a97a9;
+            margin-top: 5px
+        }
+
+        .submission {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            border: 1px solid #c8dcff;
+            background: #f8fbff;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 18px
+        }
+
+        .submission strong {
+            display: block;
+            font-size: 22px;
+            color: var(--blue);
+            margin: 5px 0
+        }
+
+        .meal-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px
+        }
+
+        .meal {
+            border: 1px solid #f4d4b0;
+            background: #fffaf4;
+            border-radius: 12px;
+            padding: 17px
+        }
+
+        .meal h3 {
+            margin: 0 0 8px;
+            font-size: 15px;
+            color: #a85b17
+        }
+
+        .meal p {
+            margin: 0;
+            color: #6d7b91;
+            font-size: 13px
+        }
+
+        .hidden {
+            display: none !important
+        }
+
+        .mobile-menu {
+            display: none
+        }
+
+        @media(max-width:1000px) {
+            .layout {
+                grid-template-columns: 76px minmax(0, 1fr)
+            }
+
+            aside {
+                padding: 18px 9px
+            }
+
+            .side-label,
+            .nav span,
+            .aside-bottom {
+                display: none
+            }
+
+            .nav {
+                justify-content: center;
+                padding: 14px 8px;
+                font-size: 19px
+            }
+
+            .stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr))
+            }
+
+            .columns {
+                grid-template-columns: 1fr
+            }
+
+            .main {
+                padding: 22px
+            }
+        }
+
+        @media(max-width:640px) {
+            .topbar {
+                height: 60px;
+                padding: 0 14px
+            }
+
+            .brand {
+                font-size: 15px
+            }
+
+            .top-user .user-room {
+                display: none
+            }
+
+            .logout {
+                padding: 8px;
+                font-size: 12px
+            }
+
+            .layout {
+                display: block;
+                min-height: calc(100vh - 60px)
+            }
+
+            aside {
+                display: none
+            }
+
+            /* 모바일에서 메뉴 버튼으로 사이드바를 열면 메뉴 이름도 표시 */
+            aside.mobile-open {
+                display: flex;
+                position: fixed;
+                top: 60px;
+                left: 0;
+                bottom: 0;
+                z-index: 20;
+                width: 230px;
+                min-height: calc(100vh - 60px);
+                overflow-y: auto;
+                padding: 18px 14px;
+                box-shadow: 8px 0 24px rgba(0, 0, 0, .16);
+            }
+
+            aside.mobile-open .side-label,
+            aside.mobile-open .nav span,
+            aside.mobile-open .aside-bottom {
+                display: block;
+            }
+
+            aside.mobile-open .nav {
+                justify-content: flex-start;
+                padding: 13px 14px;
+                font-size: 14px;
+            }
+
+            .main {
+                padding: 16px 12px
+            }
+
+            .page-heading {
+                align-items: flex-start;
+                flex-direction: column
+            }
+
+            .page-heading h1 {
+                font-size: 22px
+            }
+
+            .profile {
+                padding: 16px
+            }
+
+            .avatar {
+                width: 50px;
+                height: 50px
+            }
+
+            .stats {
+                gap: 9px
+            }
+
+            .stat {
+                padding: 12px;
+                gap: 8px
+            }
+
+            .stat-icon {
+                width: 34px;
+                height: 34px;
+                font-size: 17px
+            }
+
+            .stat strong {
+                font-size: 19px
+            }
+
+            .stat small {
+                font-size: 11px
+            }
+
+            .card {
+                padding: 15px
+            }
+
+            .submission {
+                align-items: flex-start;
+                flex-direction: column
+            }
+
+            .submission .btn {
+                width: 100%
+            }
+
+            .meal-row {
+                grid-template-columns: 1fr
+            }
+
+            .filters input,
+            .filters select {
+                width: 100%;
+                min-width: 0
+            }
+
+            .mobile-menu {
+                display: inline-block;
+                background: white;
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                padding: 8px 10px
+            }
+
+            .table-wrap table {
+                min-width: 650px
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="topbar">
+        <div style="display:flex;align-items:center;gap:12px"><button class="mobile-menu"
+                onclick="toggleMenu()">☰</button>
+            <div class="brand"><span class="brand-mark">⌂</span> 정심관 출결 시스템</div>
+        </div>
+        <div class="top-user"><span id="topName">오건우</span><span class="user-room" id="topRoom">403호</span><button
+                class="logout" onclick="alert('로그아웃 예시 동작입니다.')">↪ 로그아웃</button></div>
+    </header>
+    <div class="layout">
+        <aside id="sidebar">
+            <div class="side-label">메뉴</div><button class="nav active" onclick="showPage('home',this)">⌂ <span>메인
+                    페이지</span></button><button class="nav" onclick="showPage('attendance',this)">▤ <span>출결
+                    관리</span></button><button class="nav" onclick="showPage('students',this)">♙ <span>학생
+                    관리</span></button><button class="nav" onclick="showPage('notices',this)">⚑
+                <span>공지사항</span></button><button class="nav" onclick="showPage('settings',this)">⚙
+                <span>설정</span></button>
+            <div class="aside-bottom">●<span id="sideName">오건우</span><br><span id="sideRole">학생</span></div>
+        </aside>
+        <main class="main">
+            <div class="page-heading">
+                <div>
+                    <h1 id="pageTitle">오건우 · 403호</h1>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center"><select class="date" id="roleSelect"
+                        onchange="changeRole()">
+                        <option value="student">학생 페이지</option>
+                        <option value="admin">관리자 선생님 페이지</option>
+                        <option value="supervisor">사감 선생님 페이지</option>
+                    </select><span class="date">2026년 10월 21일</span></div>
+            </div>
+            <section id="profile" class="profile">
+                <div class="avatar">♙</div>
+                <div>
+                    <h2 id="profileName">오건우</h2>
+                    <p id="profileSub">403호 · 정심관(남)</p>
+                </div>
+            </section>
+            <section class="stats" id="stats">
+                <div class="stat">
+                    <div class="stat-icon">♙</div>
+                    <div><small>전체 학생</small><strong>64<em>명</em></strong></div>
+                </div>
+                <div class="stat">
+                    <div class="stat-icon">▰</div>
+                    <div><small>현재 잔류</small><strong>48<em>명</em></strong></div>
+                </div>
+                <div class="stat">
+                    <div class="stat-icon">⌂</div>
+                    <div><small>현재 귀가</small><strong>16<em>명</em></strong></div>
+                </div>
+            </section>
+            <section id="studentHome" class="hidden">
+                <div class="card">
+                    <div class="submission">
+                        <div><small style="color:#6d7b91">오늘의 제출 상태</small><strong id="submitState">미제출</strong><span
+                                style="font-size:13px;color:#6d7b91">오늘의 출결 정보를 아직 제출하지 않았습니다.</span></div><button
+                            class="btn" id="submitBtn" onclick="submitAttendance()">출결 제출하기➤</button>
+                    </div>
+                    <div class="meal-row">
+                        <div class="meal">
+                            <h3>현재 상태</h3>
+                            <p style="font-size:22px;font-weight:800;color:#27965b;margin:8px 0" id="studentStatus">잔류
+                            </p><select id="studentStatusSelect" class="date"
+                                onchange="document.getElementById('studentStatus').textContent=this.value">
+                                <option>잔류</option>
+                                <option>귀가</option>
+                                <option>외박</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-head">
+                        <h2>오늘의 출결 정보</h2>
+                    </div>
+                    <div class="notice">출결 제출 안내<small>매일 정해진 시간 안에 출결 상태를 선택한 뒤 제출해 주세요.</small></div>
+                </div>
+            </section>
+            <section id="staffHome" class="hidden">
+                <div class="columns">
+                    <div class="card">
+                        <div class="card-head">
+                            <h2 id="tableTitle">전체 학생 출결 현황</h2><button class="btn secondary small"
+                                onclick="showPage('attendance',document.querySelectorAll('.nav')[1])">전체 보기 →</button>
+                        </div>
+                        <div class="filters"><input placeholder="이름 또는 호실 검색" oninput="filterRows(this.value)"><select>
+                                <option>전체 출결 상태</option>
+                                <option>잔류</option>
+                                <option>귀가</option>
+                                <option>외박</option>
+                            </select></div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>이름</th>
+                                        <th>호실</th>
+                                        <th>출결 상태</th>
+                                        <th>제출</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="studentRows"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="card">
+                            <div class="card-head">
+                                <h2>빠른 출결 등록</h2>
+                            </div>
+                            <p style="font-size:13px;color:#6d7b91">학생을 선택해 출결 상태를 변경하세요.</p>
+                            <div class="filters"><select id="quickStudent">
+                                    <option>김민준 · 101호</option>
+                                    <option>이서연 · 102호</option>
+                                    <option>박지훈 · 103호</option>
+                                </select></div>
+                            <div class="quick-buttons"><button onclick="alert('잔류 상태로 변경했습니다.')">잔류</button><button
+                                    onclick="alert('귀가 상태로 변경했습니다.')">귀가</button><button
+                                    onclick="alert('외박 상태로 변경했습니다.')">외박</button></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-head">
+                                <h2>최근 공지사항</h2>
+                            </div>
+                            <div class="notice">오늘 출결 제출 안내<small>2026.10.21</small></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <section id="genericPage" class="hidden">
+                <div class="card">
+                    <div class="card-head">
+                        <h2 id="genericTitle">출결 관리</h2>
+                    </div>
+                    <p id="genericText" style="color:#6d7b91">출결 관련 정보를 확인하고 관리할 수 있습니다.</p>
+                    <div class="filters"><input placeholder="이름 또는 호실 검색"><select>
+                            <option>전체 출결 상태</option>
+                            <option>잔류</option>
+                            <option>귀가</option>
+                            <option>외박</option>
+                        </select><button class="btn" onclick="alert('검색 예시 동작입니다.')">검색</button></div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script>
+        const data = [['김민준', '101호', '잔류', '제출 완료'], ['이서연', '102호', '귀가', '제출 완료'], ['박지훈', '103호', '잔류', '제출 완료'], ['최예진', '104호', '귀가', '미제출'], ['정현우', '105호', '잔류', '제출 완료'], ['강하늘', '106호', '외박', '제출 완료'], ['유다은', '107호', '잔류', '미제출']];
+        let role = 'student';
+        function badge(v) { let c = v === '잔류' || v === '신청' || v === '제출 완료' ? 'green' : v === '귀가' ? 'gray' : v === '외박' ? 'purple' : v === '미제출' ? 'orange' : 'gray'; return `<span class="pill ${c}">${v}</span>` }
+        function renderRows(q = '') { document.getElementById('studentRows').innerHTML = data.filter(r => r.join(' ').includes(q)).map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${badge(r[2])}</td><td>${badge(r[3])}</td></tr>`).join('') }
+        function filterRows(v) { renderRows(v) }
+        function changeRole() { role = document.getElementById('roleSelect').value; const names = { student: ['오건우', '학생', '오건우 · 403호', ''], admin: ['김선생님', '관리자', '관리자 대시보드', ''], supervisor: ['이선생님', '사감 선생님', '사감 출결 관리', ''] }; let n = names[role]; document.getElementById('topName').textContent = n[0]; document.getElementById('sideName').textContent = n[0]; document.getElementById('sideRole').textContent = n[1]; document.getElementById('pageTitle').textContent = n[2]; document.getElementById('profileName').textContent = n[0]; document.getElementById('profileSub').textContent = role === 'student' ? '101호 · 소프트웨어과' : n[1] + ' · 기숙사 출결 시스템'; document.getElementById('profile').classList.toggle('hidden', role !== 'student'); document.getElementById('stats').classList.toggle('hidden', role === 'student'); document.getElementById('studentHome').classList.toggle('hidden', role !== 'student'); document.getElementById('staffHome').classList.toggle('hidden', role === 'student'); document.getElementById('topRoom').classList.toggle('hidden', role !== 'student'); document.getElementById('tableTitle').textContent = role === 'admin' ? '전체 학생 출결 현황' : '오늘의 출결 확인'; document.getElementById('sidebar').querySelectorAll('.nav').forEach((b, i) => b.classList.toggle('active', i === 0)); }
+        function showPage(page, btn) { document.getElementById('studentHome').classList.add('hidden'); document.getElementById('staffHome').classList.add('hidden'); document.getElementById('genericPage').classList.add('hidden'); if (page === 'home') { role === 'student' ? document.getElementById('studentHome').classList.remove('hidden') : document.getElementById('staffHome').classList.remove('hidden') } else { document.getElementById('genericPage').classList.remove('hidden'); const titles = { attendance: '출결 관리', students: '학생 관리', notices: '공지사항', settings: '설정' }; document.getElementById('genericTitle').textContent = titles[page] || '관리'; document.getElementById('genericText').textContent = page === 'attendance' ? '날짜와 학생별 출결 상태를 확인하고 필요한 정보를 수정하세요.' : page === 'students' ? '학생 이름, 학번, 학년, 반, 호실 정보를 관리하세요.' : page === 'notices' ? '학생과 사감 선생님에게 전달할 공지사항을 확인하세요.' : '계정 및 화면 설정을 관리하세요.' } document.querySelectorAll('.nav').forEach(x => x.classList.remove('active')); if (btn) btn.classList.add('active') }
+        function submitAttendance() { document.getElementById('submitState').textContent = '제출 완료'; document.getElementById('submitState').style.color = '#27965b'; document.getElementById('submitBtn').textContent = '제출 완료 ✓'; document.getElementById('submitBtn').disabled = true }
+        function toggleMenu() { const a = document.getElementById('sidebar'); a.classList.toggle('mobile-open') }
+        renderRows();
+    </script>
+</body>
+
+</html>

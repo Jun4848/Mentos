@@ -1,0 +1,2 @@
+ALTER TABLE mentos.user_accounts
+  ADD COLUMN is_checked BOOLEAN NOT NULL DEFAULT FALSE;
