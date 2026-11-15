@@ -162,6 +162,8 @@ Vercel에서는 DB 초기화 완료를 기다리는 요청 처리 함수를 즉�
 
 계정 데이터만 추가했으므로 애플리케이션 코드·스키마 변경과 재배포는 필요하지 않았습니다. 학생 테스트에는 기존 시간 외 입장 토글을 사용했습니다. Google OAuth는 앱에 구현되어 있지 않아 기존 아이디·비밀번호 방식으로 검증했습니다.
 
+관리자 로그인 401 제보 후 발급한 자격 정보로 운영 로그인을 다시 확인했습니다. 로그인·인증 정보·관리자 명단은 모두 HTTP 200, 검증 세션 로그아웃은 204였습니다. 브라우저 탭 제어 연결은 사용할 수 없었으나 Chrome 앱의 접근성 화면 조회로 현재 운영 `/admin` 페이지에 접속한 상태와 학생 2명·귀가 1명·미체크 1명 표시를 직접 확인했습니다. 최초 401을 발생시킨 입력값은 확인되지 않아 원인으로 단정하지 않았으며 계정·비밀번호·애플리케이션 변경은 수행하지 않았습니다.
+
 작업 브랜치는 `chore/supabase-vercel-deploy`입니다. 현재 저장소에는 `dev` 브랜치가 없으며 GitHub 인증이 없어 Issue 생성과 번호 반영을 완료하지 못했습니다.
 
 참고 문서는 [Vercel Services](https://vercel.com/docs/services), [Services 설정](https://vercel.com/docs/services/config-reference), [Supabase DB 연결](https://supabase.com/docs/guides/database/connecting-to-postgres)입니다.
