@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "${PORT:-3000}:3000"
+      - "${BACKEND_BIND_IP:-0.0.0.0}:${PORT:-3000}:3000"
     env_file:
       - .env
     environment:
@@ -13,6 +13,9 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       TZ: UTC
+      # 로컬 개발용 로그인 페이지에서 브라우저별 출석 시간 토글을 제공합니다.
+      ENABLE_ATTENDANCE_TIME_TOGGLE: ${ENABLE_ATTENDANCE_TIME_TOGGLE:-true}
+      ENABLE_ATTENDANCE_NETWORK_TOGGLE: ${ENABLE_ATTENDANCE_NETWORK_TOGGLE:-true}
     volumes:
       - .:/app
       - /app/node_modules

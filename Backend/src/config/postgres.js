@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const { Pool, TypeOverrides } = require('pg');
+const { attachDatabasePool } = require('@vercel/functions');
 
 // 애플리케이션 쿼리의 바인딩만 변환합니다. 따옴표 안의 ?는 그대로 둡니다.
 function bindParameters(sql) {
@@ -9,6 +10,7 @@ function bindParameters(sql) {
 }
 
 function createPostgresPool(env = process.env) {
+  const serverless = env.VERCEL === '1';
   const url = new URL(env.DATABASE_URL);
   const sslDisabled = env.DATABASE_SSL === 'false';
   if (sslDisabled && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) {
@@ -22,13 +24,17 @@ function createPostgresPool(env = process.env) {
     connectionString: url.toString(),
     ssl: sslDisabled ? false : {
       rejectUnauthorized: true,
-      ...(env.DATABASE_SSL_CA_FILE ? { ca: fs.readFileSync(env.DATABASE_SSL_CA_FILE, 'utf8') } : {}),
+      // 함수 번들에서 파일 경로가 바뀌어도 동일한 CA로 검증할 수 있도록 PEM 환경변수를 우선합니다.
+      ...(env.DATABASE_SSL_CA ? { ca: env.DATABASE_SSL_CA }
+        : env.DATABASE_SSL_CA_FILE ? { ca: fs.readFileSync(env.DATABASE_SSL_CA_FILE, 'utf8') } : {}),
     },
-    max: 5,
+    max: serverless ? 1 : 5,
     connectionTimeoutMillis: 10000,
-    idleTimeoutMillis: 30000,
+    idleTimeoutMillis: serverless ? 1000 : 30000,
     types,
   });
+  // 중지된 함수의 타이머에 의존하지 않고 유휴 연결을 반환합니다.
+  if (serverless) attachDatabasePool(native);
   native.on('error', (error) => console.error('PostgreSQL idle connection failed:', error.code || 'connection error'));
 
   function wrap(client) {

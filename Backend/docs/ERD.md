@@ -24,6 +24,8 @@ erDiagram
         varchar password_hash "scrypt salt와 해시"
         enum role "STUDENT 또는 ADMIN"
         varchar status "상태, 15자, NOT NULL, 기본값 빈 문자열"
+        boolean is_checked "체크 완료 여부, NOT NULL, 기본값 false"
+        datetime checked_until "체크 표시 만료 시각, UTC, nullable"
         timestamp created_at
         timestamp updated_at
     }
@@ -63,6 +65,8 @@ erDiagram
 
 `user_accounts.status`는 최대 15자의 상태 문자열입니다. 값을 지정하지 않으면 빈 문자열로 저장하며 `NULL`은 허용하지 않습니다. 기존 계정에도 빈 문자열로 추가합니다.
 
+`user_accounts.is_checked`는 체크 완료 여부이며 API에서는 `isChecked`라는 boolean으로 제공합니다. 기존·신규 계정의 기본값은 `false`입니다. 귀가 상태에서는 체크를 차단하며, 허용된 네트워크에서 잔류 상태인 학생만 본인 값을 `true`로 변경할 수 있습니다. `checked_until`에 점심 15:00 또는 저녁 20:30의 만료 시각을 UTC로 저장하며, 종료 후 한 시간이 지나면 `is_checked=false`, `checked_until=NULL`로 초기화합니다. MySQL은 `BOOLEAN`(0/1 + CHECK)과 `DATETIME`, PostgreSQL은 `BOOLEAN`과 `TIMESTAMPTZ`를 사용합니다. 기존 true 값의 만료 시각은 마이그레이션 당시 기존 `updated_at`을 기준으로 지정합니다.
+
 계정에 출결 값 하나만 두면 날짜별 이력이 덮어써집니다. 출결은 별도 테이블에 저장하고 `(student_id, attendance_date, period)`를 유일하게 만들어 동일 시간대의 중복 제출을 DB에서 막습니다. 호수는 계정에서 조회하므로 여러 기록에 같은 값을 복사하지 않습니다. 현재 구조에서 과거 기록에 표시되는 호수는 학생의 현재 호수입니다. 호실 이동 이력이 필요해지면 별도 입실 이력 테이블을 추가할 수 있습니다.
 
 외출과 귀가는 기간과 승인 절차가 같으므로 테이블을 나누지 않고 `type`으로 구분합니다. `status`는 승인·반려·취소 상태이므로 신청 유형과 별도입니다. `ends_at > starts_at`을 DB에서 검사하고 API는 학생별 잠금과 트랜잭션으로 겹치는 대기/승인 신청을 막습니다. 종료와 다음 신청 시작이 같은 경우는 허용합니다.
@@ -73,4 +77,4 @@ erDiagram
 
 `schema_migrations`는 적용 버전을 관리하는 내부 테이블입니다. 기존 DB의 `legacy_home_stay`, `legacy_leave_requests`는 보존용 테이블이며 새 API의 ERD에는 포함하지 않았습니다. `home_stay.choice`의 잔류 선택은 외출·귀가 신청과 다른 의미라 임의로 변환하지 않습니다. 잔류 선택 기능이 필요하면 별도 요구사항으로 설계합니다.
 
-실제 생성 SQL: [001_initial.sql](../src/database/001_initial.sql), 상태 컬럼 추가: [002_account_status.sql](../src/database/002_account_status.sql). MySQL의 CHECK 제약은 8.0.16 이상에서 적용됩니다. [MySQL 공식 문서](https://dev.mysql.com/doc/refman/8.0/en/create-table-check-constraints.html)
+실제 생성 SQL: [001_initial.sql](../src/database/001_initial.sql), 상태 컬럼 추가: [002_account_status.sql](../src/database/002_account_status.sql), 체크 상태 추가: [003_account_checked.sql](../src/database/003_account_checked.sql), 만료 시각 추가: [004_check_expiry.sql](../src/database/004_check_expiry.sql). PostgreSQL은 [002_account_checked.sql](../src/database/postgres/002_account_checked.sql), [003_check_expiry.sql](../src/database/postgres/003_check_expiry.sql)을 사용합니다. MySQL의 CHECK 제약은 8.0.16 이상에서 적용됩니다. [MySQL 공식 문서](https://dev.mysql.com/doc/refman/8.0/en/create-table-check-constraints.html)

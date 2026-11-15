@@ -1,0 +1,13 @@
+.login-notice-modal { width: min(380px, calc(100% - 40px)); max-height: calc(100dvh - 40px); margin: auto; padding: 0; overflow: auto; border: 0; border-radius: 24px; color: #263d32; background: #fff; box-shadow: 0 24px 80px #122b2940; font-family: inherit; }
+.login-notice-modal::backdrop { background: #122b2970; backdrop-filter: blur(4px); }
+.login-notice-content { position: relative; padding: 34px 28px 26px; text-align: center; }
+.login-notice-close { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; color: #7f8b84; background: transparent; font-size: 26px; line-height: 1; cursor: pointer; }
+.login-notice-close:hover { background: #f0f5f1; }
+.login-notice-icon { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto 20px; border-radius: 18px; color: #16815b; background: #eaf6ef; }
+.login-notice-icon svg { width: 27px; height: 27px; }
+.login-notice-content h2 { margin: 0 0 13px; font-size: 21px; line-height: 1.5; font-weight: 700; letter-spacing: -.6px; }
+.login-notice-content p { margin: 0; color: #6b7a71; font-size: 14px; line-height: 1.9; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-line; }
+.login-notice-confirm { width: 100%; min-height: 46px; margin-top: 26px; padding: 12px 20px; border: 0; border-radius: 13px; color: #fff; background: #059669; font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; touch-action: manipulation; }
+.login-notice-confirm:hover { background: #047857; }
+.login-notice-modal button:focus-visible { outline: 3px solid #63b491; outline-offset: 3px; }
+@media (max-width: 359px) { .login-notice-content { padding: 32px 22px 22px; } .login-notice-content h2 { font-size: 19px; } }
